@@ -14,7 +14,7 @@ in the source distribution for its full text.
 #include <signal.h>
 #include <stdlib.h>
 #include <stdbool.h>
-#include <execinfo.h>
+//#include <execinfo.h>
 
 #include "String.h"
 

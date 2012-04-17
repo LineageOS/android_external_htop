@@ -113,7 +113,7 @@
 #define HAVE_UNISTD_H 1
 
 /* Define to 1 if you have the <valgrind/valgrind.h> header file. */
-#define HAVE_VALGRIND_VALGRIND_H 1
+/* #undef HAVE_VALGRIND_VALGRIND_H */
 
 /* Define if vserver support enabled. */
 /* #undef HAVE_VSERVER */
@@ -151,7 +151,7 @@
 #define PACKAGE_VERSION "0.9"
 
 /* Whether we are in debugging more or not */
-#define PLPA_DEBUG 1
+#define PLPA_DEBUG 0
 
 /* The PLPA symbol prefix */
 #define PLPA_SYM_PREFIX plpa_
@@ -160,7 +160,7 @@
 #define PLPA_SYM_PREFIX_CAPS PLPA_
 
 /* Whether we want Valgrind support or not */
-#define PLPA_WANT_VALGRIND_SUPPORT 1
+#define PLPA_WANT_VALGRIND_SUPPORT 0
 
 /* Path of proc filesystem */
 #define PROCDIR "/proc"

@@ -21,7 +21,9 @@
 #else
 
    /* No debugging */
+   #ifndef NDEBUG
    #define NDEBUG
+   #endif
    #define debug_done() sleep(0)
 
 #endif

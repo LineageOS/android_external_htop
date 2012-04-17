@@ -1,0 +1,18 @@
+diff --git a/ProcessList.c b/ProcessList.c
+index c234357..3bb1b81 100644
+--- a/ProcessList.c
++++ b/ProcessList.c
+@@ -473,7 +473,12 @@ static void ProcessList_readCGroupFile(Process* process, const char* dirname, co
+       char** fields = String_split(trimmed, ':');
+       free(trimmed);
+ 
+-      process->cgroup = strndup(fields[2] + 1, 10);
++      if (!fields[1] || !fields[2]) {
++         process->cgroup = strdup(""); // cgroups do not work
++      }
++      else {
++         process->cgroup = strndup(fields[2] + 1, 10);
++      }
+       String_freeArray(fields);
+    }
+    fclose(file);

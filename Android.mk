@@ -7,7 +7,7 @@ LOCAL_CFLAGS:= \
 
 LOCAL_C_INCLUDES:= \
 	external/ncurses/include \
-	external/htop-0.9/plpa-1.3.2/src/libplpa
+	external/htop/plpa-1.3.2/src/libplpa
 
 LOCAL_SRC_FILES:= \
 	AvailableMetersPanel.c CategoriesPanel.c CheckItem.c \

@@ -9,26 +9,13 @@ Released under the GNU GPL, see the COPYING file
 in the source distribution for its full text.
 */
 
-#define _GNU_SOURCE
-#include <stdio.h>
-#include <unistd.h>
-#include <stdbool.h>
-#include <unistd.h>
-#include <fcntl.h>
-#include <sys/types.h>
-#include <sys/wait.h>
-
-#include "ProcessList.h"
 #include "Process.h"
-#include "ListItem.h"
 #include "Panel.h"
 #include "FunctionBar.h"
-
 
 typedef struct TraceScreen_ {
    Process* process;
    Panel* display;
-   FunctionBar* bar;
    bool tracing;
 } TraceScreen;
 

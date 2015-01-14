@@ -1,26 +1,23 @@
 /*
-htop
-(C) 2004-2010 Hisham H. Muhammad
+htop - String.c
+(C) 2004-2011 Hisham H. Muhammad
 Released under the GNU GPL, see the COPYING file
 in the source distribution for its full text.
 */
 
-#define _GNU_SOURCE
 #include "String.h"
+
+#include "config.h"
+
 #include <string.h>
 #include <strings.h>
 #include <stdlib.h>
 #include <stdio.h>
 
-#include "debug.h"
-
 /*{
 #define String_startsWith(s, match) (strstr((s), (match)) == (s))
+#define String_contains_i(s1, s2) (strcasestr(s1, s2) != NULL)
 }*/
-
-inline char* String_copy(const char* orig) {
-   return strdup(orig);
-}
 
 char* String_cat(const char* s1, const char* s2) {
    int l1 = strlen(s1);
@@ -55,7 +52,8 @@ inline int String_eq(const char* s1, const char* s2) {
    return (strcmp(s1, s2) == 0);
 }
 
-char** String_split(const char* s, char sep) {
+char** String_split(const char* s, char sep, int* n) {
+   *n = 0;
    const int rate = 10;
    char** out = (char**) malloc(sizeof(char*) * rate);
    int ctr = 0;
@@ -70,7 +68,13 @@ char** String_split(const char* s, char sep) {
       ctr++;
       if (ctr == blocks) {
          blocks += rate;
-         out = (char**) realloc(out, sizeof(char*) * blocks);
+         char** newOut = (char**) realloc(out, sizeof(char*) * blocks);
+         if (newOut) {
+            out = newOut;
+         } else {
+            blocks -= rate;
+            break;
+         }
       }
       s += size + 1;
    }
@@ -81,8 +85,12 @@ char** String_split(const char* s, char sep) {
       out[ctr] = token;
       ctr++;
    }
-   out = realloc(out, sizeof(char*) * (ctr + 1));
+   char** newOut = realloc(out, sizeof(char*) * (ctr + 1));
+   if (newOut) {
+      out = newOut;
+   }
    out[ctr] = NULL;
+   *n = ctr;
    return out;
 }
 
@@ -91,17 +99,6 @@ void String_freeArray(char** s) {
       free(s[i]);
    }
    free(s);
-}
-
-int String_contains_i(const char* s, const char* match) {
-   int lens = strlen(s);
-   int lenmatch = strlen(match);
-   for (int i = 0; i < lens-lenmatch; i++) {
-      if (strncasecmp(s, match, strlen(match)) == 0)
-         return 1;
-      s++;
-   }
-   return 0;
 }
 
 char* String_getToken(const char* line, const unsigned short int numMatch) {
@@ -120,7 +117,7 @@ char* String_getToken(const char* line, const unsigned short int numMatch) {
          count++;
     
       if(inWord == 1){
-         if (count == numMatch && line[i] != ' ' && line[i] != '\0' && line[i] != '\n' && line[i] != EOF) {
+         if (count == numMatch && line[i] != ' ' && line[i] != '\0' && line[i] != '\n' && line[i] != (char)EOF) {
             match[foundCount] = line[i];
             foundCount++;
          }

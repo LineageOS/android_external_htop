@@ -4,27 +4,24 @@
 #define HEADER_Settings
 /*
 htop - Settings.h
-(C) 2004-2010 Hisham H. Muhammad
+(C) 2004-2011 Hisham H. Muhammad
 Released under the GNU GPL, see the COPYING file
 in the source distribution for its full text.
 */
 
-#include "String.h"
-#include "ProcessList.h"
-#include "Header.h"
-
-#include "debug.h"
-
 #define DEFAULT_DELAY 15
 
+#include "ProcessList.h"
+#include "Header.h"
+#include <stdbool.h>
 
 typedef struct Settings_ {
    char* userSettings;
    ProcessList* pl;
    Header* header;
    int colorScheme;
-   bool changed;
    int delay;
+   bool changed;
 } Settings;
 
 
@@ -32,6 +29,6 @@ void Settings_delete(Settings* this);
 
 bool Settings_write(Settings* this);
 
-Settings* Settings_new(ProcessList* pl, Header* header);
+Settings* Settings_new(ProcessList* pl, Header* header, int cpuCount);
 
 #endif

@@ -4,44 +4,18 @@
 #define HEADER_htop
 /*
 htop - htop.h
-(C) 2004-2010 Hisham H. Muhammad
+(C) 2004-2011 Hisham H. Muhammad
 Released under the GNU GPL, see the COPYING file
 in the source distribution for its full text.
 */
 
-#define _GNU_SOURCE
-#include <unistd.h>
-#include <math.h>
-#include <sys/param.h>
-#include <ctype.h>
-#include <stdbool.h>
-#include <locale.h>
-#include <getopt.h>
-
-#include "ProcessList.h"
-#include "CRT.h"
-#include "Panel.h"
-#include "UsersTable.h"
-#include "SignalItem.h"
-#include "RichString.h"
-#include "Settings.h"
-#include "ScreenManager.h"
-#include "FunctionBar.h"
-#include "ListItem.h"
-#include "CategoriesPanel.h"
-#include "SignalsPanel.h"
-#include "TraceScreen.h"
-#include "OpenFilesScreen.h"
-#include "AffinityPanel.h"
-
-#include "config.h"
-#include "debug.h"
-
 //#link m
 
-#define INCSEARCH_MAX 40
+#define COPYRIGHT "(C) 2004-2012 Hisham Muhammad"
 
-#define COPYRIGHT "(C) 2004-2010 Hisham Muhammad"
+typedef bool(*ForeachProcessFn)(Process*, size_t);
+
+void sortBy(Panel* panel, ProcessList* pl, Settings* settings, int headerHeight, FunctionBar* defaultBar, Header* header);
 
 int main(int argc, char** argv);
 

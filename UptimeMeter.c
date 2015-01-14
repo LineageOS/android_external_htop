@@ -1,18 +1,20 @@
 /*
-htop
-(C) 2004-2010 Hisham H. Muhammad
+htop - UptimeMeter.c
+(C) 2004-2011 Hisham H. Muhammad
 Released under the GNU GPL, see the COPYING file
 in the source distribution for its full text.
 */
 
 #include "UptimeMeter.h"
-#include "Meter.h"
 
 #include "ProcessList.h"
-
 #include "CRT.h"
 
-#include "debug.h"
+#include <math.h>
+
+/*{
+#include "Meter.h"
+}*/
 
 int UptimeMeter_attributes[] = {
    UPTIME
@@ -21,8 +23,10 @@ int UptimeMeter_attributes[] = {
 static void UptimeMeter_setValues(Meter* this, char* buffer, int len) {
    double uptime = 0;
    FILE* fd = fopen(PROCDIR "/uptime", "r");
-   fscanf(fd, "%lf", &uptime);
-   fclose(fd);
+   if (fd) {
+      fscanf(fd, "%64lf", &uptime);
+      fclose(fd);
+   }
    int totalseconds = (int) ceil(uptime);
    int seconds = totalseconds % 60;
    int minutes = (totalseconds/60) % 60;
@@ -45,11 +49,13 @@ static void UptimeMeter_setValues(Meter* this, char* buffer, int len) {
    snprintf(buffer, len, "%s%02d:%02d:%02d", daysbuf, hours, minutes, seconds);
 }
 
-MeterType UptimeMeter = {
+MeterClass UptimeMeter_class = {
+   .super = {
+      .extends = Class(Meter),
+      .delete = Meter_delete
+   },
    .setValues = UptimeMeter_setValues, 
-   .display = NULL,
-   .mode = TEXT_METERMODE,
-   .items = 1,
+   .defaultMode = TEXT_METERMODE,
    .total = 100.0,
    .attributes = UptimeMeter_attributes,
    .name = "Uptime",

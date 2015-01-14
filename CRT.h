@@ -4,22 +4,13 @@
 #define HEADER_CRT
 /*
 htop - CRT.h
-(C) 2004-2010 Hisham H. Muhammad
+(C) 2004-2011 Hisham H. Muhammad
 Released under the GNU GPL, see the COPYING file
 in the source distribution for its full text.
 */
 
-
-#include <curses.h>
-#include <signal.h>
-#include <stdlib.h>
-#include <stdbool.h>
-//#include <execinfo.h>
-
-#include "String.h"
-
-#include "config.h"
-#include "debug.h"
+#ifdef HAVE_EXECINFO_H
+#endif
 
 #define ColorPair(i,j) COLOR_PAIR((7-i)*8+j)
 
@@ -41,8 +32,7 @@ in the source distribution for its full text.
 
 //#link curses
 
-bool CRT_hasColors;
-
+#include <stdbool.h>
 
 typedef enum ColorElements_ {
    RESET_COLOR,
@@ -86,6 +76,7 @@ typedef enum ColorElements_ {
    GRAPH_9,
    MEMORY_USED,
    MEMORY_BUFFERS,
+   MEMORY_BUFFERS_TEXT,
    MEMORY_CACHE,
    LOAD,
    LOAD_AVERAGE_FIFTEEN,
@@ -98,6 +89,7 @@ typedef enum ColorElements_ {
    HELP_BOLD,
    HOSTNAME,
    CPU_NICE,
+   CPU_NICE_TEXT,
    CPU_NORMAL,
    CPU_KERNEL,
    CPU_IOWAIT,
@@ -108,14 +100,20 @@ typedef enum ColorElements_ {
    LAST_COLORELEMENT
 } ColorElements;
 
+void CRT_fatalError(const char* note) __attribute__ ((noreturn));
+
 
 // TODO: centralize these in Settings.
 
-extern int CRT_delay;
-
 extern int CRT_colorScheme;
 
+extern bool CRT_utf8;
+
 extern int CRT_colors[LAST_COLORELEMENT];
+
+extern int CRT_cursorX;
+
+extern int CRT_scrollHAmount;
 
 char* CRT_termType;
 
@@ -126,6 +124,8 @@ void *backtraceArray[128];
 void CRT_init(int delay, int colorScheme);
 
 void CRT_done();
+
+void CRT_fatalError(const char* note);
 
 int CRT_readKey();
 

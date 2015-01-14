@@ -4,16 +4,13 @@
 #define HEADER_Header
 /*
 htop - Header.h
-(C) 2004-2010 Hisham H. Muhammad
+(C) 2004-2011 Hisham H. Muhammad
 Released under the GNU GPL, see the COPYING file
 in the source distribution for its full text.
 */
 
+#include "ProcessList.h"
 #include "Meter.h"
-
-#include "debug.h"
-#include <assert.h>
-
 
 typedef enum HeaderSide_ {
    LEFT_HEADER,
@@ -24,9 +21,9 @@ typedef struct Header_ {
    Vector* leftMeters;
    Vector* rightMeters;
    ProcessList* pl;
-   bool margin;
    int height;
    int pad;
+   bool margin;
 } Header;
 
 
@@ -42,7 +39,7 @@ void Header_createMeter(Header* this, char* name, HeaderSide side);
 
 void Header_setMode(Header* this, int i, MeterModeId mode, HeaderSide side);
 
-Meter* Header_addMeter(Header* this, MeterType* type, int param, HeaderSide side);
+Meter* Header_addMeter(Header* this, MeterClass* type, int param, HeaderSide side);
 
 int Header_size(Header* this, HeaderSide side);
 
@@ -50,9 +47,11 @@ char* Header_readMeterName(Header* this, int i, HeaderSide side);
 
 MeterModeId Header_readMeterMode(Header* this, int i, HeaderSide side);
 
-void Header_defaultMeters(Header* this);
+void Header_defaultMeters(Header* this, int cpuCount);
 
-void Header_draw(Header* this);
+void Header_reinit(Header* this);
+
+void Header_draw(const Header* this);
 
 int Header_calculateHeight(Header* this);
 

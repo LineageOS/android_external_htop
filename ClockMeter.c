@@ -1,16 +1,19 @@
 /*
-htop
-(C) 2004-2010 Hisham H. Muhammad
+htop - ClockMeter.c
+(C) 2004-2011 Hisham H. Muhammad
 Released under the GNU GPL, see the COPYING file
 in the source distribution for its full text.
 */
 
 #include "ClockMeter.h"
-#include "Meter.h"
+
+#include "CRT.h"
 
 #include <time.h>
 
-#include "debug.h"
+/*{
+#include "Meter.h"
+}*/
 
 int ClockMeter_attributes[] = {
    CLOCK
@@ -18,17 +21,20 @@ int ClockMeter_attributes[] = {
 
 static void ClockMeter_setValues(Meter* this, char* buffer, int size) {
    time_t t = time(NULL);
-   struct tm *lt = localtime(&t);
+   struct tm result;
+   struct tm *lt = localtime_r(&t, &result);
    this->values[0] = lt->tm_hour * 60 + lt->tm_min;
    strftime(buffer, size, "%H:%M:%S", lt);
 }
 
-MeterType ClockMeter = {
+MeterClass ClockMeter_class = {
+   .super = {
+      .extends = Class(Meter),
+      .delete = Meter_delete
+   },
    .setValues = ClockMeter_setValues, 
-   .display = NULL,
-   .mode = TEXT_METERMODE,
+   .defaultMode = TEXT_METERMODE,
    .total = 100.0,
-   .items = 1,
    .attributes = ClockMeter_attributes,
    .name = "Clock",
    .uiName = "Clock",

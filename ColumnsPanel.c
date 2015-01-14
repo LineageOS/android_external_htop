@@ -1,14 +1,22 @@
+/*
+htop - ColumnsPanel.c
+(C) 2004-2011 Hisham H. Muhammad
+Released under the GNU GPL, see the COPYING file
+in the source distribution for its full text.
+*/
 
 #include "ColumnsPanel.h"
 
+#include "String.h"
+
+#include <assert.h>
+#include <stdlib.h>
+#include <ctype.h>
+
+/*{
 #include "Panel.h"
 #include "Settings.h"
 #include "ScreenManager.h"
-
-#include "debug.h"
-#include <assert.h>
-
-/*{
 
 typedef struct ColumnsPanel_ {
    Panel super;
@@ -60,21 +68,35 @@ static HandlerResult ColumnsPanel_eventHandler(Panel* super, int ch) {
          result = HANDLED;
          break;
       }
+      default:
+      {
+         if (isalpha(ch))
+            result = Panel_selectByTyping(super, ch);
+         if (result == BREAK_LOOP)
+            result = IGNORED;
+         break;
+      }
    }
    if (result == HANDLED)
       ColumnsPanel_update(super);
    return result;
 }
 
+PanelClass ColumnsPanel_class = {
+   .super = {
+      .extends = Class(Panel),
+      .delete = ColumnsPanel_delete
+   },
+   .eventHandler = ColumnsPanel_eventHandler
+};
+
 ColumnsPanel* ColumnsPanel_new(Settings* settings, ScreenManager* scr) {
-   ColumnsPanel* this = (ColumnsPanel*) malloc(sizeof(ColumnsPanel));
+   ColumnsPanel* this = AllocThis(ColumnsPanel);
    Panel* super = (Panel*) this;
-   Panel_init(super, 1, 1, 1, 1, LISTITEM_CLASS, true);
-   ((Object*)this)->delete = ColumnsPanel_delete;
+   Panel_init(super, 1, 1, 1, 1, Class(ListItem), true);
 
    this->settings = settings;
    this->scr = scr;
-   super->eventHandler = ColumnsPanel_eventHandler;
    Panel_setHeader(super, "Active Columns");
 
    ProcessField* fields = this->settings->pl->fields;
@@ -100,11 +122,14 @@ void ColumnsPanel_update(Panel* super) {
    // FIXME: this is crappily inefficient
    free(this->settings->pl->fields);
    this->settings->pl->fields = (ProcessField*) malloc(sizeof(ProcessField) * (size+1));
+   this->settings->pl->flags = 0;
    for (int i = 0; i < size; i++) {
       char* text = ((ListItem*) Panel_get(super, i))->value;
           int j = ColumnsPanel_fieldNameToIndex(text);
-          if (j > 0)
+          if (j > 0) {
              this->settings->pl->fields[i] = j;
+             this->settings->pl->flags |= Process_fieldFlags[j];
+          }
    }
    this->settings->pl->fields[size] = 0;
 }

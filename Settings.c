@@ -1,28 +1,34 @@
 /*
 htop - Settings.c
-(C) 2004-2010 Hisham H. Muhammad
+(C) 2004-2011 Hisham H. Muhammad
 Released under the GNU GPL, see the COPYING file
 in the source distribution for its full text.
 */
 
 #include "Settings.h"
-#include "String.h"
-#include "ProcessList.h"
-#include "Header.h"
 
-#include "debug.h"
+#include "String.h"
+#include "Vector.h"
+
+#include <sys/stat.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
 
 #define DEFAULT_DELAY 15
 
 /*{
+#include "ProcessList.h"
+#include "Header.h"
+#include <stdbool.h>
 
 typedef struct Settings_ {
    char* userSettings;
    ProcessList* pl;
    Header* header;
    int colorScheme;
-   bool changed;
    int delay;
+   bool changed;
 } Settings;
 
 }*/
@@ -34,10 +40,10 @@ void Settings_delete(Settings* this) {
 
 static void Settings_readMeters(Settings* this, char* line, HeaderSide side) {
    char* trim = String_trim(line);
-   char** ids = String_split(trim, ' ');
+   int nIds;
+   char** ids = String_split(trim, ' ', &nIds);
    free(trim);
-   int i;
-   for (i = 0; ids[i] != NULL; i++) {
+   for (int i = 0; ids[i]; i++) {
       Header_createMeter(this->header, ids[i], side);
    }
    String_freeArray(ids);
@@ -45,39 +51,44 @@ static void Settings_readMeters(Settings* this, char* line, HeaderSide side) {
 
 static void Settings_readMeterModes(Settings* this, char* line, HeaderSide side) {
    char* trim = String_trim(line);
-   char** ids = String_split(trim, ' ');
+   int nIds;
+   char** ids = String_split(trim, ' ', &nIds);
    free(trim);
-   int i;
-   for (i = 0; ids[i] != NULL; i++) {
+   for (int i = 0; ids[i]; i++) {
       int mode = atoi(ids[i]);
       Header_setMode(this->header, i, mode, side);
    }
    String_freeArray(ids);
 }
 
-static bool Settings_read(Settings* this, char* fileName) {
-   // TODO: implement File object and make
-   // file I/O object-oriented.
-   FILE* fd;
-   fd = fopen(fileName, "r");
-   if (fd == NULL) {
+static bool Settings_read(Settings* this, const char* fileName, int cpuCount) {
+   FILE* fd = fopen(fileName, "r");
+   if (!fd)
       return false;
-   }
+   
    const int maxLine = 2048;
    char buffer[maxLine];
    bool readMeters = false;
    while (fgets(buffer, maxLine, fd)) {
-      char** option = String_split(buffer, '=');
+      int nOptions;
+      char** option = String_split(buffer, '=', &nOptions);
+      if (nOptions < 2) {
+         String_freeArray(option);
+         continue;
+      }
       if (String_eq(option[0], "fields")) {
          char* trim = String_trim(option[1]);
-         char** ids = String_split(trim, ' ');
+         int nIds;
+         char** ids = String_split(trim, ' ', &nIds);
          free(trim);
          int i, j;
-         for (j = 0, i = 0; i < LAST_PROCESSFIELD && ids[i] != NULL; i++) {
+         this->pl->flags = 0;
+         for (j = 0, i = 0; i < LAST_PROCESSFIELD && ids[i]; i++) {
             // This "+1" is for compatibility with the older enum format.
             int id = atoi(ids[i]) + 1;
             if (id > 0 && id < LAST_PROCESSFIELD) {
                this->pl->fields[j] = id;
+               this->pl->flags |= Process_fieldFlags[id];
                j++;
             }
          }
@@ -113,6 +124,12 @@ static bool Settings_read(Settings* this, char* fileName) {
          this->pl->detailedCPUTime = atoi(option[1]);
       } else if (String_eq(option[0], "detailed_cpu_time")) {
          this->pl->detailedCPUTime = atoi(option[1]);
+      } else if (String_eq(option[0], "cpu_count_from_zero")) {
+         this->pl->countCPUsFromZero = atoi(option[1]);
+      } else if (String_eq(option[0], "update_process_names")) {
+         this->pl->updateProcessNames = atoi(option[1]);
+      } else if (String_eq(option[0], "account_guest_in_cpu_meter")) {
+         this->pl->accountGuestInCPUMeter = atoi(option[1]);
       } else if (String_eq(option[0], "delay")) {
          this->delay = atoi(option[1]);
       } else if (String_eq(option[0], "color_scheme")) {
@@ -136,7 +153,7 @@ static bool Settings_read(Settings* this, char* fileName) {
    }
    fclose(fd);
    if (!readMeters) {
-      Header_defaultMeters(this->header);
+      Header_defaultMeters(this->header, cpuCount);
    }
    return true;
 }
@@ -149,9 +166,8 @@ bool Settings_write(Settings* this) {
    if (fd == NULL) {
       return false;
    }
-   fprintf(fd, "# Beware! This file is rewritten every time htop exits.\n");
+   fprintf(fd, "# Beware! This file is rewritten by htop when settings are changed in the interface.\n");
    fprintf(fd, "# The parser is also very primitive, and not human-friendly.\n");
-   fprintf(fd, "# (I know, it's in the todo list).\n");
    fprintf(fd, "fields=");
    for (int i = 0; this->pl->fields[i]; i++) {
       // This "-1" is for compatibility with the older enum format.
@@ -172,6 +188,9 @@ bool Settings_write(Settings* this) {
    fprintf(fd, "tree_view=%d\n", (int) this->pl->treeView);
    fprintf(fd, "header_margin=%d\n", (int) this->header->margin);
    fprintf(fd, "detailed_cpu_time=%d\n", (int) this->pl->detailedCPUTime);
+   fprintf(fd, "cpu_count_from_zero=%d\n", (int) this->pl->countCPUsFromZero);
+   fprintf(fd, "update_process_names=%d\n", (int) this->pl->updateProcessNames);
+   fprintf(fd, "account_guest_in_cpu_meter=%d\n", (int) this->pl->accountGuestInCPUMeter);
    fprintf(fd, "color_scheme=%d\n", (int) this->colorScheme);
    fprintf(fd, "delay=%d\n", (int) this->delay);
    fprintf(fd, "left_meters=");
@@ -200,36 +219,66 @@ bool Settings_write(Settings* this) {
    return true;
 }
 
-Settings* Settings_new(ProcessList* pl, Header* header) {
+Settings* Settings_new(ProcessList* pl, Header* header, int cpuCount) {
    Settings* this = malloc(sizeof(Settings));
    this->pl = pl;
    this->header = header;
-   const char* home;
-   char* rcfile;
-   home = getenv("HOME_ETC");
-   if (!home) home = getenv("HOME");
-   if (!home) home = "";
-   rcfile = getenv("HOMERC");
-   if (!rcfile)
-      this->userSettings = String_cat(home, "/.htoprc");
-   else
-      this->userSettings = String_copy(rcfile);
+   char* legacyDotfile = NULL;
+   char* rcfile = getenv("HTOPRC");
+   if (rcfile) {
+      this->userSettings = strdup(rcfile);
+   } else {
+      const char* home = getenv("HOME");
+      if (!home) home = "";
+      const char* xdgConfigHome = getenv("XDG_CONFIG_HOME");
+      char* configDir = NULL;
+      char* htopDir = NULL;
+      if (xdgConfigHome) {
+         this->userSettings = String_cat(xdgConfigHome, "/htop/htoprc");
+         configDir = strdup(xdgConfigHome);
+         htopDir = String_cat(xdgConfigHome, "/htop");
+      } else {
+         this->userSettings = String_cat(home, "/.config/htop/htoprc");
+         configDir = String_cat(home, "/.config");
+         htopDir = String_cat(home, "/.config/htop");
+      }
+      legacyDotfile = String_cat(home, "/.htoprc");
+      (void) mkdir(configDir, 0700);
+      (void) mkdir(htopDir, 0700);
+      free(htopDir);
+      free(configDir);
+      struct stat st;
+      if (lstat(legacyDotfile, &st) != 0) {
+         st.st_mode = 0;
+      }
+      if (access(legacyDotfile, R_OK) != 0 || S_ISLNK(st.st_mode)) {
+         free(legacyDotfile);
+         legacyDotfile = NULL;
+      }
+   }
    this->colorScheme = 0;
    this->changed = false;
    this->delay = DEFAULT_DELAY;
-   bool ok = Settings_read(this, this->userSettings);
-   if (!ok) {
+   bool ok = Settings_read(this, legacyDotfile ? legacyDotfile : this->userSettings, cpuCount);
+   if (ok) {
+      if (legacyDotfile) {
+         // Transition to new location and delete old configuration file
+         if (Settings_write(this))
+            unlink(legacyDotfile);
+      }
+   } else {
       this->changed = true;
       // TODO: how to get SYSCONFDIR correctly through Autoconf?
       char* systemSettings = String_cat(SYSCONFDIR, "/htoprc");
-      ok = Settings_read(this, systemSettings);
+      ok = Settings_read(this, systemSettings, cpuCount);
       free(systemSettings);
       if (!ok) {
-         Header_defaultMeters(this->header);
+         Header_defaultMeters(this->header, cpuCount);
          pl->hideKernelThreads = true;
          pl->highlightMegabytes = true;
          pl->highlightThreads = false;
       }
    }
+   free(legacyDotfile);
    return this;
 }

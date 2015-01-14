@@ -4,36 +4,12 @@
 #define HEADER_Process
 /*
 htop - Process.h
-(C) 2004-2010 Hisham H. Muhammad
+(C) 2004-2011 Hisham H. Muhammad
 Released under the GNU GPL, see the COPYING file
 in the source distribution for its full text.
 */
 
-#define _GNU_SOURCE
-#include "ProcessList.h"
-#include "Object.h"
-#include "CRT.h"
-#include "String.h"
-#include "RichString.h"
-
-#include "debug.h"
-
-#include <stdio.h>
-#include <sys/time.h>
-#include <sys/resource.h>
-#include <sys/param.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <unistd.h>
-#include <signal.h>
-#include <string.h>
-#include <stdbool.h>
-#include <pwd.h>
-#include <sched.h>
-#include <time.h>
-
-#ifdef HAVE_PLPA
-#include <plpa.h>
+#ifdef HAVE_LIBHWLOC
 #endif
 
 // This works only with glibc 2.1+. On earlier versions
@@ -43,6 +19,16 @@ in the source distribution for its full text.
 #endif
 #define PAGE_SIZE_KB ( PAGE_SIZE / ONE_K )
 
+#include "Object.h"
+#include "Affinity.h"
+#include "IOPriority.h"
+#include <sys/types.h>
+
+#define PROCESS_FLAG_IO 1
+#define PROCESS_FLAG_IOPRIO 2
+#define PROCESS_FLAG_OPENVZ 4
+#define PROCESS_FLAG_VSERVER 8
+#define PROCESS_FLAG_CGROUP 16
 
 #ifndef Process_isKernelThread
 #define Process_isKernelThread(_process) (_process->pgrp == 0)
@@ -74,6 +60,10 @@ typedef enum ProcessField_ {
    #ifdef HAVE_CGROUP
    CGROUP,
    #endif
+   #ifdef HAVE_OOM
+   OOM,
+   #endif
+   IO_PRIORITY,
    LAST_PROCESSFIELD
 } ProcessField;
 
@@ -83,7 +73,6 @@ typedef struct Process_ {
    Object super;
 
    struct ProcessList_ *pl;
-   bool updated;
 
    pid_t pid;
    char* comm;
@@ -99,21 +88,69 @@ typedef struct Process_ {
    pid_t tgid;
    int tpgid;
    unsigned long int flags;
-   #ifdef DEBUG
+
+   uid_t st_uid;
+   float percent_cpu;
+   float percent_mem;
+   char* user;
+
+   unsigned long long int utime;
+   unsigned long long int stime;
+   unsigned long long int cutime;
+   unsigned long long int cstime;
+   long int priority;
+   long int nice;
+   long int nlwp;
+   IOPriority ioPriority;
+   char starttime_show[8];
+   time_t starttime_ctime;
+
+   #ifdef HAVE_TASKSTATS
+   unsigned long long io_rchar;
+   unsigned long long io_wchar;
+   unsigned long long io_syscr;
+   unsigned long long io_syscw;
+   unsigned long long io_read_bytes;
+   unsigned long long io_write_bytes;
+   unsigned long long io_cancelled_write_bytes;
+   double io_rate_read_bps;
+   unsigned long long io_rate_read_time;
+   double io_rate_write_bps;
+   unsigned long long io_rate_write_time;   
+   #endif
+
+   int processor;
+   long m_size;
+   long m_resident;
+   long m_share;
+   long m_trs;
+   long m_drs;
+   long m_lrs;
+   long m_dt;
+
+   #ifdef HAVE_OPENVZ
+   unsigned int ctid;
+   unsigned int vpid;
+   #endif
+   #ifdef HAVE_VSERVER
+   unsigned int vxid;
+   #endif
+
+   #ifdef HAVE_CGROUP
+   char* cgroup;
+   #endif
+   #ifdef HAVE_OOM
+   unsigned int oom;
+   #endif
+
+   int exit_signal;
+   int basenameOffset;
+   bool updated;
+
    unsigned long int minflt;
    unsigned long int cminflt;
    unsigned long int majflt;
    unsigned long int cmajflt;
-   #endif
-   unsigned long int utime;
-   unsigned long int stime;
-   long int cutime;
-   long int cstime;
-   long int priority;
-   long int nice;
-   long int nlwp;
-   char starttime_show[8];
-   time_t starttime_ctime;
    #ifdef DEBUG
    long int itrealvalue;
    unsigned long int vsize;
@@ -132,60 +169,30 @@ typedef struct Process_ {
    unsigned long int nswap;
    unsigned long int cnswap;
    #endif
-   int exit_signal;
-   int processor;
-   int m_size;
-   int m_resident;
-   int m_share;
-   int m_trs;
-   int m_drs;
-   int m_lrs;
-   int m_dt;
-   uid_t st_uid;
-   float percent_cpu;
-   float percent_mem;
-   char* user;
-   #ifdef HAVE_OPENVZ
-   unsigned int ctid;
-   unsigned int vpid;
-   #endif
-   #ifdef HAVE_VSERVER
-   unsigned int vxid;
-   #endif
-   #ifdef HAVE_TASKSTATS
-   unsigned long long io_rchar;
-   unsigned long long io_wchar;
-   unsigned long long io_syscr;
-   unsigned long long io_syscw;
-   unsigned long long io_read_bytes;
-   unsigned long long io_write_bytes;
-   unsigned long long io_cancelled_write_bytes;
-   double io_rate_read_bps;
-   unsigned long long io_rate_read_time;
-   double io_rate_write_bps;
-   unsigned long long io_rate_write_time;   
-   #endif
-   #ifdef HAVE_CGROUP
-   char* cgroup;
-   #endif
+
 } Process;
 
 
-#ifdef DEBUG
-extern char* PROCESS_CLASS;
-#else
-#define PROCESS_CLASS NULL
-#endif
-
 extern const char *Process_fieldNames[];
+
+extern const int Process_fieldFlags[];
 
 extern const char *Process_fieldTitles[];
 
-#define ONE_K 1024
+
+void Process_getMaxPid();
+
+#define ONE_K 1024L
 #define ONE_M (ONE_K * ONE_K)
 #define ONE_G (ONE_M * ONE_K)
 
+#define ONE_DECIMAL_K 1000L
+#define ONE_DECIMAL_M (ONE_DECIMAL_K * ONE_DECIMAL_K)
+#define ONE_DECIMAL_G (ONE_DECIMAL_M * ONE_DECIMAL_K)
+
 void Process_delete(Object* cast);
+
+extern ObjectClass Process_class;
 
 Process* Process_new(struct ProcessList_ *pl);
 
@@ -193,13 +200,37 @@ void Process_toggleTag(Process* this);
 
 bool Process_setPriority(Process* this, int priority);
 
-#ifdef HAVE_PLPA
-unsigned long Process_getAffinity(Process* this);
+bool Process_changePriorityBy(Process* this, size_t delta);
 
-bool Process_setAffinity(Process* this, unsigned long mask);
+IOPriority Process_updateIOPriority(Process* this);
+
+bool Process_setIOPriority(Process* this, IOPriority ioprio);
+
+/*
+[1] Note that before kernel 2.6.26 a process that has not asked for
+an io priority formally uses "none" as scheduling class, but the
+io scheduler will treat such processes as if it were in the best
+effort class. The priority within the best effort class will  be
+dynamically  derived  from  the  cpu  nice level of the process:
+extern io_priority;
+*/
+#define Process_effectiveIOPriority(p_) (IOPriority_class(p_->ioPriority) == IOPRIO_CLASS_NONE ? IOPriority_tuple(IOPRIO_CLASS_BE, (p_->nice + 20) / 5) : p_->ioPriority)
+
+#ifdef HAVE_LIBHWLOC
+
+Affinity* Process_getAffinity(Process* this);
+
+bool Process_setAffinity(Process* this, Affinity* affinity);
+
+#elif HAVE_NATIVE_AFFINITY
+
+Affinity* Process_getAffinity(Process* this);
+
+bool Process_setAffinity(Process* this, Affinity* affinity);
+
 #endif
 
-void Process_sendSignal(Process* this, int sgn);
+void Process_sendSignal(Process* this, size_t sgn);
 
 int Process_pidCompare(const void* v1, const void* v2);
 

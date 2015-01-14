@@ -1,26 +1,33 @@
+/*
+htop - RichString.c
+(C) 2004,2011 Hisham H. Muhammad
+Released under the GNU GPL, see the COPYING file
+in the source distribution for its full text.
+*/
 
 #include "RichString.h"
 
-#ifndef CONFIG_H
-#define CONFIG_H
-#include "config.h"
-#endif
-
 #include <stdlib.h>
 #include <string.h>
-#include <ctype.h>
-
-#include "debug.h"
-#include <assert.h>
-#ifdef HAVE_LIBNCURSESW
-#include <ncursesw/curses.h>
-#else
-#include <curses.h>
-#endif
 
 #define RICHSTRING_MAXLEN 300
 
 /*{
+#include "config.h"
+#include <ctype.h>
+
+#include <assert.h>
+#ifdef HAVE_NCURSESW_CURSES_H
+#include <ncursesw/curses.h>
+#elif HAVE_NCURSES_NCURSES_H
+#include <ncurses/ncurses.h>
+#elif HAVE_NCURSES_CURSES_H
+#include <ncurses/curses.h>
+#elif HAVE_NCURSES_H
+#include <ncurses.h>
+#elif HAVE_CURSES_H
+#include <curses.h>
+#endif
 
 #define RichString_size(this) ((this)->chlen)
 #define RichString_sizeVal(this) ((this).chlen)
@@ -78,16 +85,15 @@ static inline void RichString_setLen(RichString* this, int len) {
 
 #ifdef HAVE_LIBNCURSESW
 
-inline void RichString_appendn(RichString* this, int attrs, const char* data_c, int len) {
+static inline void RichString_writeFrom(RichString* this, int attrs, const char* data_c, int from, int len) {
    wchar_t data[len+1];
    len = mbstowcs(data, data_c, len);
    if (len<0)
       return;
-   int oldLen = this->chlen;
-   int newLen = len + oldLen;
+   int newLen = from + len;
    RichString_setLen(this, newLen);
-   for (int i = oldLen, j = 0; i < newLen; i++, j++) {
-      memset(&this->chptr[i], 0, sizeof(this->chptr[i]));
+   memset(&this->chptr[from], 0, sizeof(CharType) * (newLen - from));
+   for (int i = from, j = 0; i < newLen; i++, j++) {
       this->chptr[i].chars[0] = data[j];
       this->chptr[i].attr = attrs;
    }
@@ -115,11 +121,10 @@ int RichString_findChar(RichString* this, char c, int start) {
 
 #else
 
-inline void RichString_appendn(RichString* this, int attrs, const char* data_c, int len) {
-   int oldLen = this->chlen;
-   int newLen = len + oldLen;
+static inline void RichString_writeFrom(RichString* this, int attrs, const char* data_c, int from, int len) {
+   int newLen = from + len;
    RichString_setLen(this, newLen);
-   for (int i = oldLen, j = 0; i < newLen; i++, j++)
+   for (int i = from, j = 0; i < newLen; i++, j++)
       this->chptr[i] = (isprint(data_c[j]) ? data_c[j] : '?') | attrs;
    this->chptr[newLen] = 0;
 }
@@ -149,17 +154,21 @@ void RichString_prune(RichString* this) {
       free(this->chptr);
    this->chptr = this->chstr;
    this->chlen = 0;
+   RichString_setChar(this, 0, 0);
 }
 
 void RichString_setAttr(RichString* this, int attrs) {
    RichString_setAttrn(this, attrs, 0, this->chlen - 1);
 }
 
-inline void RichString_append(RichString* this, int attrs, const char* data) {
-   RichString_appendn(this, attrs, data, strlen(data));
+void RichString_append(RichString* this, int attrs, const char* data) {
+   RichString_writeFrom(this, attrs, data, this->chlen, strlen(data));
+}
+
+void RichString_appendn(RichString* this, int attrs, const char* data, int len) {
+   RichString_writeFrom(this, attrs, data, this->chlen, len);
 }
 
 void RichString_write(RichString* this, int attrs, const char* data) {
-   RichString_setLen(this, 0);
-   RichString_appendn(this, attrs, data, strlen(data));
+   RichString_writeFrom(this, attrs, data, 0, strlen(data));
 }

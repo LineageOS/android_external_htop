@@ -5,91 +5,99 @@ Released under the GNU GPL, see the COPYING file
 in the source distribution for its full text.
 */
 
-#define _GNU_SOURCE
+#include "OpenFilesScreen.h"
+
+#include "CRT.h"
+#include "ProcessList.h"
+#include "ListItem.h"
+#include "IncSet.h"
+#include "String.h"
+
+#include <string.h>
 #include <stdio.h>
 #include <unistd.h>
 #include <stdbool.h>
 #include <unistd.h>
+#include <stdlib.h>
 #include <fcntl.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 
-#include "OpenFilesScreen.h"
-#include "ProcessList.h"
+/*{
 #include "Process.h"
-#include "ListItem.h"
 #include "Panel.h"
 #include "FunctionBar.h"
 
-/*{
+typedef struct OpenFiles_Data_ {
+   char* data[256];
+} OpenFiles_Data;
 
 typedef struct OpenFiles_ProcessData_ {
-   char* data[256];
-   struct OpenFiles_FileData_* files;
+   OpenFiles_Data data;
    int error;
+   struct OpenFiles_FileData_* files;
 } OpenFiles_ProcessData;
 
 typedef struct OpenFiles_FileData_ {
-   char* data[256];
+   OpenFiles_Data data;
    struct OpenFiles_FileData_* next;
 } OpenFiles_FileData;
 
 typedef struct OpenFilesScreen_ {
    Process* process;
+   pid_t pid;
    Panel* display;
    FunctionBar* bar;
-   bool tracing;
 } OpenFilesScreen;
 
 }*/
 
-static const char* ofsFunctions[] = {"Refresh", "Done   ", NULL};
+static const char* ofsFunctions[] = {"Search ", "Filter ", "Refresh", "Done   ", NULL};
 
-static const char* ofsKeys[] = {"F5", "Esc"};
+static const char* ofsKeys[] = {"F3", "F4", "F5", "Esc"};
 
-static int ofsEvents[] = {KEY_F(5), 27};
+static int ofsEvents[] = {KEY_F(3), KEY_F(4), KEY_F(5), 27};
 
 OpenFilesScreen* OpenFilesScreen_new(Process* process) {
    OpenFilesScreen* this = (OpenFilesScreen*) malloc(sizeof(OpenFilesScreen));
    this->process = process;
-   this->display = Panel_new(0, 1, COLS, LINES-3, LISTITEM_CLASS, true, ListItem_compare);
-   this->bar = FunctionBar_new(ofsFunctions, ofsKeys, ofsEvents);
-   this->tracing = true;
+   this->display = Panel_new(0, 1, COLS, LINES-3, false, Class(ListItem));
+   if (Process_isThread(process))
+      this->pid = process->tgid;
+   else
+      this->pid = process->pid;
    return this;
 }
 
 void OpenFilesScreen_delete(OpenFilesScreen* this) {
    Panel_delete((Object*)this->display);
-   FunctionBar_delete((Object*)this->bar);
    free(this);
 }
 
-static void OpenFilesScreen_draw(OpenFilesScreen* this) {
+static void OpenFilesScreen_draw(OpenFilesScreen* this, IncSet* inc) {
    attrset(CRT_colors[METER_TEXT]);
    mvhline(0, 0, ' ', COLS);
-   mvprintw(0, 0, "Files open in process %d - %s", this->process->pid, this->process->comm);
+   mvprintw(0, 0, "Snapshot of files open in process %d - %s", this->pid, this->process->comm);
    attrset(CRT_colors[DEFAULT_COLOR]);
    Panel_draw(this->display, true);
-   FunctionBar_draw(this->bar, NULL);
+   IncSet_drawBar(inc);
 }
 
-static OpenFiles_ProcessData* OpenFilesScreen_getProcessData(int pid) {
+static OpenFiles_ProcessData* OpenFilesScreen_getProcessData(pid_t pid) {
    char command[1025];
    snprintf(command, 1024, "lsof -P -p %d -F 2> /dev/null", pid);
    FILE* fd = popen(command, "r");
-   OpenFiles_ProcessData* process = calloc(sizeof(OpenFiles_ProcessData), 1);
-   OpenFiles_FileData* file = NULL;
-   OpenFiles_ProcessData* item = process;
-   bool anyRead = false;
+   OpenFiles_ProcessData* pdata = calloc(1, sizeof(OpenFiles_ProcessData));
+   OpenFiles_FileData* fdata = NULL;
+   OpenFiles_Data* item = &(pdata->data);
    if (!fd) {
-      process->error = 127;
-      return process;
+      pdata->error = 127;
+      return pdata;
    }
    while (!feof(fd)) {
       int cmd = fgetc(fd);
-      if (cmd == EOF && !anyRead)
+      if (cmd == EOF)
          break;
-      anyRead = true;
       char* entry = malloc(1024);
       if (!fgets(entry, 1024, fd)) {
          free(entry);
@@ -98,69 +106,90 @@ static OpenFiles_ProcessData* OpenFilesScreen_getProcessData(int pid) {
       char* newline = strrchr(entry, '\n');
       *newline = '\0';
       if (cmd == 'f') {
-         OpenFiles_FileData* nextFile = calloc(sizeof(OpenFiles_ProcessData), 1);
-         if (file == NULL) {
-            process->files = nextFile;
+         OpenFiles_FileData* nextFile = calloc(1, sizeof(OpenFiles_FileData));
+         if (fdata == NULL) {
+            pdata->files = nextFile;
          } else {
-            file->next = nextFile;
+            fdata->next = nextFile;
          }
-         file = nextFile;
-         item = (OpenFiles_ProcessData*) file;
+         fdata = nextFile;
+         item = &(fdata->data);
       }
+      assert(cmd >= 0 && cmd <= 0xff);
       item->data[cmd] = entry;
    }
-   process->error = pclose(fd);
-   return process;
+   pdata->error = pclose(fd);
+   return pdata;
 }
 
-static void OpenFilesScreen_scan(OpenFilesScreen* this) {
+static inline void addLine(const char* line, Vector* lines, Panel* panel, const char* incFilter) {
+   Vector_add(lines, (Object*) ListItem_new(line, 0));
+   if (!incFilter || String_contains_i(line, incFilter))
+      Panel_add(panel, (Object*)Vector_get(lines, Vector_size(lines)-1));
+}
+
+static inline void OpenFiles_Data_clear(OpenFiles_Data* data) {
+   for (int i = 0; i < 255; i++)
+      if (data->data[i])
+         free(data->data[i]);
+}
+
+static void OpenFilesScreen_scan(OpenFilesScreen* this, Vector* lines, IncSet* inc) {
    Panel* panel = this->display;
-   int idx = MAX(Panel_getSelectedIndex(panel), 0);
+   int idx = Panel_getSelectedIndex(panel);
    Panel_prune(panel);
-   OpenFiles_ProcessData* process = OpenFilesScreen_getProcessData(this->process->pid);
-   if (process->error == 127) {
-      Panel_add(panel, (Object*) ListItem_new("Could not execute 'lsof'. Please make sure it is available in your $PATH.", 0));
-   } else if (process->error == 1) {
-      Panel_add(panel, (Object*) ListItem_new("Failed listing open files.", 0));
+   OpenFiles_ProcessData* pdata = OpenFilesScreen_getProcessData(this->pid);
+   if (pdata->error == 127) {
+      addLine("Could not execute 'lsof'. Please make sure it is available in your $PATH.", lines, panel, IncSet_filter(inc));
+   } else if (pdata->error == 1) {
+      addLine("Failed listing open files.", lines, panel, IncSet_filter(inc));
    } else {
-      OpenFiles_FileData* file = process->files;
-      while (file) {
+      OpenFiles_FileData* fdata = pdata->files;
+      while (fdata) {
          char entry[1024];
+         char** data = fdata->data.data;
          sprintf(entry, "%5s %4s %10s %10s %10s %s",
-            file->data['f'] ? file->data['f'] : "",
-            file->data['t'] ? file->data['t'] : "",
-            file->data['D'] ? file->data['D'] : "",
-            file->data['s'] ? file->data['s'] : "",
-            file->data['i'] ? file->data['i'] : "",
-            file->data['n'] ? file->data['n'] : "");
-         Panel_add(panel, (Object*) ListItem_new(entry, 0));
-         for (int i = 0; i < 255; i++)
-            if (file->data[i])
-               free(file->data[i]);
-         OpenFiles_FileData* old = file;
-         file = file->next;
+            data['f'] ? data['f'] : "",
+            data['t'] ? data['t'] : "",
+            data['D'] ? data['D'] : "",
+            data['s'] ? data['s'] : "",
+            data['i'] ? data['i'] : "",
+            data['n'] ? data['n'] : "");
+         addLine(entry, lines, panel, IncSet_filter(inc));
+         OpenFiles_Data_clear(&fdata->data);
+         OpenFiles_FileData* old = fdata;
+         fdata = fdata->next;
          free(old);
       }
-      for (int i = 0; i < 255; i++)
-         if (process->data[i])
-            free(process->data[i]);
+      OpenFiles_Data_clear(&pdata->data);
    }
-   free(process);
-   Vector_sort(panel->items);
+   free(pdata);
+   Vector_insertionSort(lines);
+   Vector_insertionSort(panel->items);
    Panel_setSelected(panel, idx);
 }
 
 void OpenFilesScreen_run(OpenFilesScreen* this) {
    Panel* panel = this->display;
    Panel_setHeader(panel, "   FD TYPE     DEVICE       SIZE       NODE NAME");
-   OpenFilesScreen_scan(this);
-   OpenFilesScreen_draw(this);
-   //CRT_disableDelay();
+
+   FunctionBar* bar = FunctionBar_new(ofsFunctions, ofsKeys, ofsEvents);
+   IncSet* inc = IncSet_new(bar);
+   
+   Vector* lines = Vector_new(panel->items->type, true, DEFAULT_SIZE);
+
+   OpenFilesScreen_scan(this, lines, inc);
+   OpenFilesScreen_draw(this, inc);
    
    bool looping = true;
    while (looping) {
+   
       Panel_draw(panel, true);
+      
+      if (inc->active)
+         move(LINES-1, CRT_cursorX);
       int ch = getch();
+      
       if (ch == KEY_MOUSE) {
          MEVENT mevent;
          int ok = getmouse(&mevent);
@@ -169,19 +198,33 @@ void OpenFilesScreen_run(OpenFilesScreen* this) {
                Panel_setSelected(panel, mevent.y - panel->y + panel->scrollV);
                ch = 0;
             } if (mevent.y == LINES - 1)
-               ch = FunctionBar_synthesizeEvent(this->bar, mevent.x);
+               ch = FunctionBar_synthesizeEvent(inc->bar, mevent.x);
       }
+
+      if (inc->active) {
+         IncSet_handleKey(inc, ch, panel, IncSet_getListItemValue, lines);
+         continue;
+      }
+
       switch(ch) {
       case ERR:
          continue;
+      case KEY_F(3):
+      case '/':
+         IncSet_activate(inc, INC_SEARCH);
+         break;
+      case KEY_F(4):
+      case '\\':
+         IncSet_activate(inc, INC_FILTER);
+         break;
       case KEY_F(5):
          clear();
-         OpenFilesScreen_scan(this);
-         OpenFilesScreen_draw(this);
+         OpenFilesScreen_scan(this, lines, inc);
+         OpenFilesScreen_draw(this, inc);
          break;
       case '\014': // Ctrl+L
          clear();
-         OpenFilesScreen_draw(this);
+         OpenFilesScreen_draw(this, inc);
          break;
       case 'q':
       case 27:
@@ -190,11 +233,14 @@ void OpenFilesScreen_run(OpenFilesScreen* this) {
          break;
       case KEY_RESIZE:
          Panel_resize(panel, COLS, LINES-2);
-         OpenFilesScreen_draw(this);
+         OpenFilesScreen_draw(this, inc);
          break;
       default:
          Panel_onKey(panel, ch);
       }
    }
-   //CRT_enableDelay();
+
+   Vector_delete(lines);
+   FunctionBar_delete((Object*)bar);
+   IncSet_delete(inc);
 }

@@ -1,9 +1,14 @@
 #                                               -*- Autoconf -*-
 # Process this file with autoconf to produce a configure script.
 
-AC_PREREQ(2.57)
-AC_INIT([htop],[0.9],[loderunner@users.sourceforge.net])
-AM_INIT_AUTOMAKE
+AC_PREREQ(2.65)
+AC_INIT([htop],[1.0.3],[hisham@gobolinux.org])
+
+# The following two lines are required by hwloc scripts
+AC_USE_SYSTEM_EXTENSIONS
+AC_CANONICAL_TARGET
+
+AM_INIT_AUTOMAKE([1.11])
 AC_CONFIG_SRCDIR([htop.c])
 AC_CONFIG_HEADER([config.h])
 AC_CONFIG_MACRO_DIR([m4])
@@ -22,9 +27,10 @@ AC_CHECK_LIB([m], [ceil], [], [missing_libraries="$missing_libraries libm"])
 # Checks for header files.
 AC_HEADER_DIRENT
 AC_HEADER_STDC
-AC_CHECK_HEADERS([stdlib.h string.h strings.h sys/param.h sys/time.h unistd.h curses.h],[:],[
+AC_CHECK_HEADERS([stdlib.h string.h strings.h sys/param.h sys/time.h unistd.h],[:],[
   missing_headers="$missing_headers $ac_header"
 ])
+AC_CHECK_HEADERS([execinfo.h],[:],[:])
 
 # Checks for typedefs, structures, and compiler characteristics.
 AC_HEADER_STDBOOL
@@ -34,8 +40,6 @@ AC_TYPE_UID_T
 
 # Checks for library functions.
 AC_FUNC_CLOSEDIR_VOID
-AC_FUNC_MALLOC
-AC_FUNC_REALLOC
 AC_TYPE_SIGNAL
 AC_FUNC_STAT
 AC_CHECK_FUNCS([memmove strncasecmp strstr strdup])
@@ -83,13 +87,22 @@ if test "x$enable_taskstats" = xyes; then
     AC_DEFINE(HAVE_TASKSTATS, 1, [Define if taskstats support enabled.])
 fi
 
-AC_ARG_ENABLE(unicode, [AC_HELP_STRING([--enable-unicode], [enable Unicode support])], ,enable_unicode="no")
+AC_ARG_ENABLE(unicode, [AC_HELP_STRING([--enable-unicode], [enable Unicode support])], ,enable_unicode="yes")
 if test "x$enable_unicode" = xyes; then
-   AC_CHECK_LIB([ncursesw], [refresh], [], [missing_libraries="$missing_libraries libncursesw"])
-   AC_CHECK_HEADERS([ncursesw/curses.h],[:],[missing_headers="$missing_headers $ac_header"])
+   AC_CHECK_LIB([ncursesw], [refresh], [], [
+      missing_libraries="$missing_libraries libncursesw"
+      AC_MSG_ERROR([You may want to use --disable-unicode or install libncursesw.])
+   ])
+   AC_CHECK_HEADERS([ncursesw/curses.h],[:],
+      [AC_CHECK_HEADERS([ncurses/ncurses.h],[:],
+         [AC_CHECK_HEADERS([ncurses/curses.h],[:],
+            [AC_CHECK_HEADERS([ncurses.h],[:],[missing_headers="$missing_headers $ac_header"])])])])
 else
    AC_CHECK_LIB([ncurses], [refresh], [], [missing_libraries="$missing_libraries libncurses"])
-   AC_CHECK_HEADERS([curses.h],[:],[missing_headers="$missing_headers $ac_header"])
+   AC_CHECK_HEADERS([curses.h],[:],
+      [AC_CHECK_HEADERS([ncurses/curses.h],[:],
+         [AC_CHECK_HEADERS([ncurses/ncurses.h],[:],
+            [AC_CHECK_HEADERS([ncurses.h],[:],[missing_headers="$missing_headers $ac_header"])])])])
 fi
 
 if test ! -z "$missing_libraries"; then
@@ -99,18 +112,42 @@ if test ! -z "$missing_headers"; then
   AC_MSG_ERROR([missing headers: $missing_headers])
 fi
 
-
-
+if test "x$cross_compiling" = xno; then
 AC_CHECK_FILE($PROCDIR/stat,,AC_MSG_ERROR(Cannot find /proc/stat. Make sure you have a Linux-compatible /proc filesystem mounted. See the file README for help.))
 AC_CHECK_FILE($PROCDIR/meminfo,,AC_MSG_ERROR(Cannot find /proc/meminfo. Make sure you have a Linux-compatible /proc filesystem mounted. See the file README for help.))
+fi
 
-AC_ARG_ENABLE(plpa, [AC_HELP_STRING([--enable-plpa], [enable PLPA support for CPU affinity])], ,enable_plpa="yes")
-PLPA_INCLUDED
-PLPA_INIT([plpa-1.3.2], [plpa_happy=yes], [plpa_happy=no])
-AM_CONDITIONAL([HAVE_PLPA], [test "$plpa_happy" = "yes" && test "$enable_plpa" = "yes"])
-if test "$plpa_happy" = "yes" && test "$enable_plpa" = "yes"
+AC_ARG_ENABLE(native_affinity, [AC_HELP_STRING([--enable-native-affinity], [enable native sched_setaffinity and sched_getaffinity for affinity support, disables hwloc])], ,enable_native_affinity="yes")
+if test "x$enable_native_affinity" = xyes -a "x$cross_compiling" = xno; then
+   AC_MSG_CHECKING([for usable sched_setaffinity])
+   AC_RUN_IFELSE([
+     AC_LANG_PROGRAM([[
+       #include <sched.h>
+       #include <errno.h>
+       static cpu_set_t cpuset;
+       ]], [[
+       CPU_ZERO(&cpuset);
+       sched_setaffinity(0, sizeof(cpu_set_t), &cpuset);
+       if (errno == ENOSYS) return 1;
+       ]])],
+     [AC_MSG_RESULT([yes])],
+     [enable_native_affinity=no
+      AC_MSG_RESULT([no])])
+fi
+if test "x$enable_native_affinity" = xyes; then
+   AC_DEFINE(HAVE_NATIVE_AFFINITY, 1, [Define if native sched_setaffinity and sched_getaffinity are to be used.])
+fi
+
+AC_ARG_ENABLE(hwloc, [AC_HELP_STRING([--enable-hwloc], [enable hwloc support for CPU affinity])],, enable_hwloc="no")
+if test "x$enable_hwloc" = xyes
 then
-   AC_DEFINE([HAVE_PLPA], [1], [Have plpa])
+   AC_CHECK_LIB([hwloc], [hwloc_linux_get_tid_cpubind], [], [missing_libraries="$missing_libraries libhwloc"])
+   AC_CHECK_HEADERS([hwloc.h],[:], [missing_headers="$missing_headers $ac_header"])
+fi
+
+AC_ARG_ENABLE(oom, [AC_HELP_STRING([--enable-oom], [enable OOM score reporting])], ,enable_oom="no")
+if test "x$enable_oom" = xyes; then
+    AC_DEFINE(HAVE_OOM, 1, [Define if OOM score support enabled.])
 fi
 
 AC_CONFIG_FILES([Makefile htop.1])

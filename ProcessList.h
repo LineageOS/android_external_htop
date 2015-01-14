@@ -9,32 +9,11 @@ Released under the GNU GPL, see the COPYING file
 in the source distribution for its full text.
 */
 
-#ifndef CONFIG_H
-#define CONFIG_H
-#include "config.h"
-#endif
-
-#include "Process.h"
 #include "Vector.h"
-#include "UsersTable.h"
 #include "Hashtable.h"
-#include "String.h"
-
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <unistd.h>
-#include <dirent.h>
-#include <stdlib.h>
-#include <stdio.h>
-#include <signal.h>
-#include <stdbool.h>
-#include <sys/utsname.h>
-#include <stdarg.h>
-#include <math.h>
-
-#include "debug.h"
-#include <assert.h>
-
+#include "UsersTable.h"
+#include "Panel.h"
+#include "Process.h"
 
 #ifndef PROCDIR
 #define PROCDIR "/proc"
@@ -56,7 +35,20 @@ in the source distribution for its full text.
 #define MAX_READ 2048
 #endif
 
+#ifndef ProcessList_cpuId
+#define ProcessList_cpuId(pl, cpu) ((pl)->countCPUsFromZero ? (cpu) : (cpu)+1)
+#endif
 
+typedef enum TreeStr_ {
+   TREE_STR_HORZ,
+   TREE_STR_VERT,
+   TREE_STR_RTEE,
+   TREE_STR_BEND,
+   TREE_STR_TEND,
+   TREE_STR_OPEN,
+   TREE_STR_SHUT,
+   TREE_STR_COUNT
+} TreeStr;
 
 typedef struct CPUData_ {
    unsigned long long int totalTime;
@@ -87,10 +79,17 @@ typedef struct CPUData_ {
 } CPUData;
 
 typedef struct ProcessList_ {
+   const char **treeStr;
    Vector* processes;
    Vector* processes2;
    Hashtable* processTable;
    UsersTable* usersTable;
+
+   Panel* panel;
+   int following;
+   uid_t userId;
+   const char* incFilter;
+   Hashtable* pidWhiteList;
 
    int cpuCount;
    int totalTasks;
@@ -98,6 +97,10 @@ typedef struct ProcessList_ {
    int kernelThreads;
    int runningTasks;
 
+   #ifdef HAVE_LIBHWLOC
+   hwloc_topology_t topology;
+   bool topologyOk;
+   #endif
    CPUData* cpus;
 
    unsigned long long int totalMem;
@@ -110,6 +113,7 @@ typedef struct ProcessList_ {
    unsigned long long int usedSwap;
    unsigned long long int freeSwap;
 
+   int flags;
    ProcessField* fields;
    ProcessField sortKey;
    int direction;
@@ -124,12 +128,23 @@ typedef struct ProcessList_ {
    bool highlightMegabytes;
    bool highlightThreads;
    bool detailedCPUTime;
+   bool countCPUsFromZero;
+   bool updateProcessNames;
+   bool accountGuestInCPUMeter;
+   bool userOnly;
 
 } ProcessList;
 
-ProcessList* ProcessList_new(UsersTable* usersTable);
+
+extern const char *ProcessList_treeStrAscii[TREE_STR_COUNT];
+
+extern const char *ProcessList_treeStrUtf8[TREE_STR_COUNT];
+
+ProcessList* ProcessList_new(UsersTable* usersTable, Hashtable* pidWhiteList);
 
 void ProcessList_delete(ProcessList* this);
+
+void ProcessList_setPanel(ProcessList* this, Panel* panel);
 
 void ProcessList_invertSortOrder(ProcessList* this);
 
@@ -157,11 +172,17 @@ void ProcessList_sort(ProcessList* this);
 
 #endif
 
+#ifdef HAVE_OOM
+
+#endif
+
 
 void ProcessList_scan(ProcessList* this);
 
 ProcessField ProcessList_keyAt(ProcessList* this, int at);
 
 void ProcessList_expandTree(ProcessList* this);
+
+void ProcessList_rebuildPanel(ProcessList* this, bool flags, int following, bool userOnly, uid_t userId, const char* incFilter);
 
 #endif

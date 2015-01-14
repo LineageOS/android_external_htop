@@ -1,18 +1,18 @@
 /*
-htop
-(C) 2004-2010 Hisham H. Muhammad
+htop - TasksMeter.c
+(C) 2004-2011 Hisham H. Muhammad
 Released under the GNU GPL, see the COPYING file
 in the source distribution for its full text.
 */
 
 #include "TasksMeter.h"
-#include "Meter.h"
 
 #include "ProcessList.h"
-
 #include "CRT.h"
 
-#include "debug.h"
+/*{
+#include "Meter.h"
+}*/
 
 int TasksMeter_attributes[] = {
    TASKS_RUNNING
@@ -55,11 +55,14 @@ static void TasksMeter_display(Object* cast, RichString* out) {
    RichString_append(out, CRT_colors[METER_TEXT], " running");
 }
 
-MeterType TasksMeter = {
+MeterClass TasksMeter_class = {
+   .super = {
+      .extends = Class(Meter),
+      .delete = Meter_delete,
+      .display = TasksMeter_display,
+   },
    .setValues = TasksMeter_setValues, 
-   .display = TasksMeter_display,
-   .mode = TEXT_METERMODE,
-   .items = 1,
+   .defaultMode = TEXT_METERMODE,
    .total = 100.0,
    .attributes = TasksMeter_attributes, 
    .name = "Tasks",

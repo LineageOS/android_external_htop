@@ -1,4 +1,71 @@
 
+What's new in version 1.0.3
+
+* Tag all children ('c' key)
+* Fixes in accounting of guest time when using virtualization
+  (thanks to Patrick Marlier)
+* Performance improvements
+  (thanks to Jann Horn)
+* Further performance improvements due to conditional parsing
+  of IO data depending on selected fields.
+* Better consistency in coloring.
+* Increase limit of buffer when tracing a deep nested process tree.
+* Display pagefault stats.
+* BUGFIX: Fix crash when adding meters and toggling detailed CPU time.
+  (thanks to Dawid Gajownik)
+* Add column to track the OOM-killer score of processes
+  (thanks to Leigh Simpson)
+
+What's new in version 1.0.2
+
+* Add IO priority support ('i' key)
+* Avoid deleting .htoprc if it is a symlink
+* Fail gracefully when /proc is not mounted
+  (thanks to Philipp Hagemeister)
+* Option to update process names on every refresh
+  (thanks to Rob Hoelz)
+* BUGFIX: Fix crashes when process list is empty
+
+What's new in version 1.0.1
+
+* Move .htoprc to XDG-compliant path ~/.config/htop/htoprc,
+  respecting $XDG_CONFIG_HOME 
+  (thanks to Hadzhimurad Ustarkhan for the suggestion.)
+* Safer behavior on the kill screen, to make it harder to kill the wrong process.
+* Fix for building in FreeBSD 8.2
+  (thanks to Trond Endrestol)
+* BUGFIX: behavior of 'F' (follow) key was broken, also affecting the
+  persistence of mouse selections.
+* BUGFIX: keep main panel up-to-date when running the screen manager,
+  to fix crash when processes die while on the F9/Kill screen.
+
+What's new in version 1.0
+
+* Performance improvements
+* Support for splitting CPU meters into two or four columns
+  (thanks to Wim Heirman)
+* Switch from PLPA, which is now deprecated, to HWLOC.
+* Bring back support for native Linux sched_setaffinity,
+  so we don't have to use HWLOC where we don't need to.
+* Support for typing in user names and column fields in selection panels.
+* Support for UTF-8 tree drawing
+  (thanks to Bin Guo)
+* Option for counting CPUs from zero
+  (thanks to Sean Noonan)
+* Meters update in every screen (no longer halting while on Setup, etc.)
+* Stricter checks for command-line options
+  (thanks to Sebastian Pipping)
+* Incremental filtering
+  (thanks to Seth Heeren for the idea and initial implementation)
+* Try harder to find the ncurses header
+  (thanks to Moritz Barsnick)
+* Man page updates
+  (thanks to Vincent Launchbury)
+* BUGFIX: Support larger numbers for process times.
+  (thanks to Tristan Nakagawa for the report.)
+* BUGFIX: Segfault in BarMeterMode_draw() for small terminal widths
+  (patch by Sebastian Pipping)
+
 What's new in version 0.9
 
 * Add support for "steal"/guest CPU time measurement

@@ -1,16 +1,23 @@
+/*
+htop - AvailableColumnsPanel.c
+(C) 2004-2011 Hisham H. Muhammad
+Released under the GNU GPL, see the COPYING file
+in the source distribution for its full text.
+*/
 
 #include "AvailableColumnsPanel.h"
-#include "Settings.h"
+
 #include "Header.h"
-#include "ScreenManager.h"
 #include "ColumnsPanel.h"
 
-#include "Panel.h"
-
-#include "debug.h"
 #include <assert.h>
+#include <stdlib.h>
+#include <ctype.h>
 
 /*{
+#include "Panel.h"
+#include "Settings.h"
+#include "ScreenManager.h"
 
 typedef struct AvailableColumnsPanel_ {
    Panel super;
@@ -46,19 +53,31 @@ static HandlerResult AvailableColumnsPanel_eventHandler(Panel* super, int ch) {
          result = HANDLED;
          break;
       }
+      default:
+      {
+         if (isalpha(ch))
+            result = Panel_selectByTyping(super, ch);
+         break;
+      }
    }
    return result;
 }
 
+PanelClass AvailableColumnsPanel_class = {
+   .super = {
+      .extends = Class(Panel),
+      .delete = AvailableColumnsPanel_delete
+   },
+   .eventHandler = AvailableColumnsPanel_eventHandler
+};
+
 AvailableColumnsPanel* AvailableColumnsPanel_new(Settings* settings, Panel* columns, ScreenManager* scr) {
-   AvailableColumnsPanel* this = (AvailableColumnsPanel*) malloc(sizeof(AvailableColumnsPanel));
+   AvailableColumnsPanel* this = AllocThis(AvailableColumnsPanel);
    Panel* super = (Panel*) this;
-   Panel_init(super, 1, 1, 1, 1, LISTITEM_CLASS, true);
-   ((Object*)this)->delete = AvailableColumnsPanel_delete;
+   Panel_init(super, 1, 1, 1, 1, Class(ListItem), true);
    
    this->settings = settings;
    this->scr = scr;
-   super->eventHandler = AvailableColumnsPanel_eventHandler;
 
    Panel_setHeader(super, "Available Columns");
 

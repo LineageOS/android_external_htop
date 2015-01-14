@@ -2,17 +2,16 @@
 
 #ifndef HEADER_AvailableColumnsPanel
 #define HEADER_AvailableColumnsPanel
-
-#include "Settings.h"
-#include "Header.h"
-#include "ScreenManager.h"
-#include "ColumnsPanel.h"
+/*
+htop - AvailableColumnsPanel.h
+(C) 2004-2011 Hisham H. Muhammad
+Released under the GNU GPL, see the COPYING file
+in the source distribution for its full text.
+*/
 
 #include "Panel.h"
-
-#include "debug.h"
-#include <assert.h>
-
+#include "Settings.h"
+#include "ScreenManager.h"
 
 typedef struct AvailableColumnsPanel_ {
    Panel super;
@@ -22,6 +21,8 @@ typedef struct AvailableColumnsPanel_ {
    ScreenManager* scr;
 } AvailableColumnsPanel;
 
+
+extern PanelClass AvailableColumnsPanel_class;
 
 AvailableColumnsPanel* AvailableColumnsPanel_new(Settings* settings, Panel* columns, ScreenManager* scr);
 

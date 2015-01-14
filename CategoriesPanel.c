@@ -1,5 +1,12 @@
+/*
+htop - CategoriesPanel.c
+(C) 2004-2011 Hisham H. Muhammad
+Released under the GNU GPL, see the COPYING file
+in the source distribution for its full text.
+*/
 
 #include "CategoriesPanel.h"
+
 #include "AvailableMetersPanel.h"
 #include "MetersPanel.h"
 #include "DisplayOptionsPanel.h"
@@ -7,12 +14,13 @@
 #include "ColorsPanel.h"
 #include "AvailableColumnsPanel.h"
 
-#include "Panel.h"
-
-#include "debug.h"
 #include <assert.h>
+#include <stdlib.h>
 
 /*{
+#include "Panel.h"
+#include "Settings.h"
+#include "ScreenManager.h"
 
 typedef struct CategoriesPanel_ {
    Panel super;
@@ -93,6 +101,12 @@ static HandlerResult CategoriesPanel_eventHandler(Panel* super, int ch) {
             result = HANDLED;
          break;
       }
+      default:
+         if (isalpha(ch))
+            result = Panel_selectByTyping(super, ch);
+         if (result == BREAK_LOOP)
+            result = IGNORED;
+         break;
    }
 
    if (result == HANDLED) {
@@ -118,15 +132,21 @@ static HandlerResult CategoriesPanel_eventHandler(Panel* super, int ch) {
    return result;
 }
 
+PanelClass CategoriesPanel_class = {
+   .super = {
+      .extends = Class(Panel),
+      .delete = CategoriesPanel_delete
+   },
+   .eventHandler = CategoriesPanel_eventHandler
+};
+
 CategoriesPanel* CategoriesPanel_new(Settings* settings, ScreenManager* scr) {
-   CategoriesPanel* this = (CategoriesPanel*) malloc(sizeof(CategoriesPanel));
+   CategoriesPanel* this = AllocThis(CategoriesPanel);
    Panel* super = (Panel*) this;
-   Panel_init(super, 1, 1, 1, 1, LISTITEM_CLASS, true);
-   ((Object*)this)->delete = CategoriesPanel_delete;
+   Panel_init(super, 1, 1, 1, 1, Class(ListItem), true);
 
    this->settings = settings;
    this->scr = scr;
-   super->eventHandler = CategoriesPanel_eventHandler;
    Panel_setHeader(super, "Setup");
    Panel_add(super, (Object*) ListItem_new("Meters", 0));
    Panel_add(super, (Object*) ListItem_new("Display options", 0));

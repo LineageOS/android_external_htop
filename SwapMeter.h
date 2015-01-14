@@ -3,27 +3,21 @@
 #ifndef HEADER_SwapMeter
 #define HEADER_SwapMeter
 /*
-htop
-(C) 2004-2010 Hisham H. Muhammad
+htop - SwapMeter.h
+(C) 2004-2011 Hisham H. Muhammad
 Released under the GNU GPL, see the COPYING file
 in the source distribution for its full text.
 */
 
 #include "Meter.h"
 
-#include "ProcessList.h"
-
-#include <stdlib.h>
-#include <curses.h>
-#include <string.h>
-#include <math.h>
-#include <sys/param.h>
-
-#include "debug.h"
-#include <assert.h>
+#define KILOBYTE 1
+#define MEGABYTE 1024
+#define GIGABYTE 1048576
 
 extern int SwapMeter_attributes[];
 
-extern MeterType SwapMeter;
+/* NOTE: Value is in kilobytes */
+extern MeterClass SwapMeter_class;
 
 #endif

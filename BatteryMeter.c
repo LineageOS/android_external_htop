@@ -1,20 +1,25 @@
 /*
-  htop
-  (C) 2004-2010 Hisham H. Muhammad
-  Released under the GNU GPL, see the COPYING file
-  in the source distribution for its full text.
+htop - BatteryMeter.c
+(C) 2004-2011 Hisham H. Muhammad
+Released under the GNU GPL, see the COPYING file
+in the source distribution for its full text.
 
-  This "Meter" written by Ian P. Hands (iphands@gmail.com, ihands@redhat.com).
+This meter written by Ian P. Hands (iphands@gmail.com, ihands@redhat.com).
 */
 
 #include "BatteryMeter.h"
-#include "Meter.h"
+
 #include "ProcessList.h"
 #include "CRT.h"
 #include "String.h"
-#include "debug.h"
+
+#include <string.h>
+#include <stdlib.h>
+#include <dirent.h>
+#include <unistd.h>
 
 /*{
+#include "Meter.h"
 
 typedef enum ACPresence_ {
    AC_ABSENT,
@@ -31,12 +36,13 @@ int BatteryMeter_attributes[] = {
 static unsigned long int parseUevent(FILE * file, const char *key) {
    char line[100];
    unsigned long int dValue = 0;
+   char* saveptr;
 
    while (fgets(line, sizeof line, file)) {
       if (strncmp(line, key, strlen(key)) == 0) {
          char *value;
-         strtok(line, "=");
-         value = strtok(NULL, "=");
+         strtok_r(line, "=", &saveptr);
+         value = strtok_r(NULL, "=", &saveptr);
          dValue = atoi(value);
          break;
       }
@@ -45,183 +51,163 @@ static unsigned long int parseUevent(FILE * file, const char *key) {
 }
 
 static unsigned long int parseBatInfo(const char *fileName, const unsigned short int lineNum, const unsigned short int wordNum) {
-   const DIR *batteryDir;
-   const struct dirent *dirEntries;
-
    const char batteryPath[] = PROCDIR "/acpi/battery/";
-   batteryDir = opendir(batteryPath);
-
-   if (batteryDir == NULL) {
+   DIR* batteryDir = opendir(batteryPath);
+   if (!batteryDir)
       return 0;
-   }
 
-   char *entryName;
-   typedef struct listLbl {
-      char *content;
-      struct listLbl *next;
-   } list;
+   #define MAX_BATTERIES 64
+   char* batteries[MAX_BATTERIES];
+   unsigned int nBatteries = 0;
+   memset(batteries, 0, MAX_BATTERIES * sizeof(char*));
 
-   list *myList = NULL;
-   list *newEntry;
-
-   /*
-      Some of this is based off of code found in kismet (they claim it came from gkrellm).
-      Written for multi battery use...
-    */
-   for (dirEntries = readdir((DIR *) batteryDir); dirEntries; dirEntries = readdir((DIR *) batteryDir)) {
-      entryName = (char *) dirEntries->d_name;
-
+   struct dirent result;
+   struct dirent* dirEntry;
+   while (nBatteries < MAX_BATTERIES) {
+      int err = readdir_r(batteryDir, &result, &dirEntry);
+      if (err || !dirEntry)
+         break;
+      char* entryName = dirEntry->d_name;
       if (strncmp(entryName, "BAT", 3))
          continue;
-
-      newEntry = calloc(1, sizeof(list));
-      newEntry->next = myList;
-      newEntry->content = entryName;
-      myList = newEntry;
+      batteries[nBatteries] = strdup(entryName);
+      nBatteries++;
    }
+   closedir(batteryDir);
 
    unsigned long int total = 0;
-   for (newEntry = myList; newEntry; newEntry = newEntry->next) {
-      const char infoPath[30];
-      const FILE *file;
-      char line[50];
+   for (unsigned int i = 0; i < nBatteries; i++) {
+      char infoPath[30];
+      snprintf(infoPath, sizeof infoPath, "%s%s/%s", batteryPath, batteries[i], fileName);
 
-      snprintf((char *) infoPath, sizeof infoPath, "%s%s/%s", batteryPath, newEntry->content, fileName);
-
-      if ((file = fopen(infoPath, "r")) == NULL) {
-         return 0;
+      FILE* file = fopen(infoPath, "r");
+      if (!file) {
+         break;
       }
 
+      char line[50] = "";
       for (unsigned short int i = 0; i < lineNum; i++) {
-         fgets(line, sizeof line, (FILE *) file);
+         char* ok = fgets(line, sizeof line, file);
+         if (!ok) break;
       }
 
-      fclose((FILE *) file);
+      fclose(file);
 
-      const char *foundNumTmp = String_getToken(line, wordNum);
-      const unsigned long int foundNum = atoi(foundNumTmp);
-      free((char *) foundNumTmp);
+      char *foundNumStr = String_getToken(line, wordNum);
+      const unsigned long int foundNum = atoi(foundNumStr);
+      free(foundNumStr);
 
       total += foundNum;
    }
 
-   free(myList);
-   free(newEntry);
-   closedir((DIR *) batteryDir);
+   for (unsigned int i = 0; i < nBatteries; i++) {
+      free(batteries[i]);
+   }
+
    return total;
 }
 
-static ACPresence chkIsOnline() {
-   FILE *file = NULL;
+static ACPresence procAcpiCheck() {
    ACPresence isOn = AC_ERROR;
+   const char *power_supplyPath = PROCDIR "/acpi/ac_adapter";
+   DIR *power_supplyDir = opendir(power_supplyPath);
+   if (!power_supplyDir) {
+      return AC_ERROR;
+   }
 
-   if (access(PROCDIR "/acpi/ac_adapter", F_OK) == 0) {
-      const struct dirent *dirEntries;
-      const char *power_supplyPath = PROCDIR "/acpi/ac_adapter";
-      DIR *power_supplyDir = opendir(power_supplyPath);
-      char *entryName;
+   struct dirent result;
+   struct dirent* dirEntry;
+   for (;;) {
+      int err = readdir_r((DIR *) power_supplyDir, &result, &dirEntry);
+      if (err || !dirEntry)
+         break;
 
-      if (!power_supplyDir) {
-         return AC_ERROR;
+      char* entryName = (char *) dirEntry->d_name;
+
+      if (entryName[0] != 'A')
+         continue;
+
+      char statePath[50];
+      snprintf((char *) statePath, sizeof statePath, "%s/%s/state", power_supplyPath, entryName);
+      FILE* file = fopen(statePath, "r");
+
+      if (!file) {
+         isOn = AC_ERROR;
+         continue;
       }
 
-      for (dirEntries = readdir((DIR *) power_supplyDir); dirEntries; dirEntries = readdir((DIR *) power_supplyDir)) {
-         entryName = (char *) dirEntries->d_name;
+      char line[100];
+      fgets(line, sizeof line, file);
+      line[sizeof(line) - 1] = '\0';
 
-         if (strncmp(entryName, "A", 1)) {
-            continue;
-         }
+      fclose(file);
 
+      const char *isOnline = String_getToken(line, 2);
 
-         char statePath[50];
-         snprintf((char *) statePath, sizeof statePath, "%s/%s/state", power_supplyPath, entryName);
-         file = fopen(statePath, "r");
-
-         if (!file) {
-            isOn = AC_ERROR;
-            continue;
-         }
-
-         char line[100];
-         fgets(line, sizeof line, file);
-         line[sizeof(line) - 1] = '\0';
-
-         if (file) {
-            fclose(file);
-            file = NULL;
-         }
-
-         const char *isOnline = String_getToken(line, 2);
-
-         if (strcmp(isOnline, "on-line") == 0) {
-            free((char *) isOnline);
-            isOn = AC_PRESENT;
-            // If any AC adapter is being used then stop
-            break;
-
-         } else {
-            isOn = AC_ABSENT;
-         }
-         free((char *) isOnline);
+      if (strcmp(isOnline, "on-line") == 0) {
+         isOn = AC_PRESENT;
+      } else {
+         isOn = AC_ABSENT;
       }
-
-      if (power_supplyDir)
-         closedir(power_supplyDir);
-
-   } else {
-
-      const char *power_supplyPath = "/sys/class/power_supply";
-
-      if (access("/sys/class/power_supply", F_OK) == 0) {
-         const struct dirent *dirEntries;
-         DIR *power_supplyDir = opendir(power_supplyPath);
-         char *entryName;
-
-         if (!power_supplyDir) {
-            return AC_ERROR;
-         }
-
-         for (dirEntries = readdir((DIR *) power_supplyDir); dirEntries; dirEntries = readdir((DIR *) power_supplyDir)) {
-            entryName = (char *) dirEntries->d_name;
-
-            if (strncmp(entryName, "A", 1)) {
-               continue;
-            }
-
-            char onlinePath[50];
-            snprintf((char *) onlinePath, sizeof onlinePath, "%s/%s/online", power_supplyPath, entryName);
-            file = fopen(onlinePath, "r");
-
-            if (!file) {
-               isOn = AC_ERROR;
-               continue;
-            }
-
-            isOn = (fgetc(file) - '0');
-
-            if (file) {
-               fclose(file);
-               file = NULL;
-            }
-
-            if (isOn == AC_PRESENT) {
-               // If any AC adapter is being used then stop
-               break;
-            } else {
-               continue;
-            }
-         }
-
-         if (power_supplyDir)
-            closedir(power_supplyDir);
+      free((char *) isOnline);
+      if (isOn == AC_PRESENT) {
+         break;
       }
    }
 
-   // Just in case :-)
-   if (file)
-      fclose(file);
+   if (power_supplyDir)
+      closedir(power_supplyDir);
+   return isOn;
+}
+
+static ACPresence sysCheck() {
+   ACPresence isOn = AC_ERROR;
+   const char *power_supplyPath = "/sys/class/power_supply";
+   DIR *power_supplyDir = opendir(power_supplyPath);
+   if (!power_supplyDir) {
+      return AC_ERROR;
+   }
+
+   struct dirent result;
+   struct dirent* dirEntry;
+   for (;;) {
+      int err = readdir_r((DIR *) power_supplyDir, &result, &dirEntry);
+      if (err || !dirEntry)
+         break;
+
+      char* entryName = (char *) dirEntry->d_name;
+      if (strncmp(entryName, "A", 1)) {
+         continue;
+      }
+      char onlinePath[50];
+      snprintf((char *) onlinePath, sizeof onlinePath, "%s/%s/online", power_supplyPath, entryName);
+      FILE* file = fopen(onlinePath, "r");
+      if (!file) {
+         isOn = AC_ERROR;
+      } else {
+         isOn = (fgetc(file) - '0');
+         fclose(file);
+         if (isOn == AC_PRESENT) {
+            // If any AC adapter is being used then stop
+            break;
+         }
+      }
+   }
+
+   if (power_supplyDir)
+      closedir(power_supplyDir);
 
    return isOn;
+}
+
+static ACPresence chkIsOnline() {
+   if (access(PROCDIR "/acpi/ac_adapter", F_OK) == 0) {
+      return procAcpiCheck();
+   } else if (access("/sys/class/power_supply", F_OK) == 0) {
+      return sysCheck();
+   } else {
+      return AC_ERROR;
+   }
 }
 
 static double getProcBatData() {
@@ -233,27 +219,25 @@ static double getProcBatData() {
    if (totalRemain == 0)
       return 0;
 
-   double percent = totalFull > 0 ? ((double) totalRemain * 100) / (double) totalFull : 0;
-   return percent;
+   return totalRemain * 100.0 / (double) totalFull;
 }
 
 static double getSysBatData() {
-   const struct dirent *dirEntries;
    const char *power_supplyPath = "/sys/class/power_supply/";
    DIR *power_supplyDir = opendir(power_supplyPath);
-
-
-   if (!power_supplyDir) {
+   if (!power_supplyDir)
       return 0;
-   }
-
-   char *entryName;
 
    unsigned long int totalFull = 0;
    unsigned long int totalRemain = 0;
 
-   for (dirEntries = readdir((DIR *) power_supplyDir); dirEntries; dirEntries = readdir((DIR *) power_supplyDir)) {
-      entryName = (char *) dirEntries->d_name;
+   struct dirent result;
+   struct dirent* dirEntry;
+   for (;;) {
+      int err = readdir_r((DIR *) power_supplyDir, &result, &dirEntry);
+      if (err || !dirEntry)
+         break;
+      char* entryName = (char *) dirEntry->d_name;
 
       if (strncmp(entryName, "BAT", 3)) {
          continue;
@@ -274,6 +258,7 @@ static double getSysBatData() {
       } else {
          //reset file pointer
          if (fseek(file, 0, SEEK_SET) < 0) {
+            closedir(power_supplyDir);
             fclose(file);
             return 0;
          }
@@ -285,6 +270,7 @@ static double getSysBatData() {
       } else {
         //reset file pointer
          if (fseek(file, 0, SEEK_SET) < 0) {
+            closedir(power_supplyDir);
             fclose(file);
             return 0;
          }
@@ -335,11 +321,13 @@ static void BatteryMeter_setValues(Meter * this, char *buffer, int len) {
    return;
 }
 
-MeterType BatteryMeter = {
+MeterClass BatteryMeter_class = {
+   .super = {
+      .extends = Class(Meter),
+      .delete = Meter_delete
+   },
    .setValues = BatteryMeter_setValues,
-   .display = NULL,
-   .mode = TEXT_METERMODE,
-   .items = 1,
+   .defaultMode = TEXT_METERMODE,
    .total = 100.0,
    .attributes = BatteryMeter_attributes,
    .name = "Battery",

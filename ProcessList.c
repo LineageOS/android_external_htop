@@ -5,20 +5,13 @@ Released under the GNU GPL, see the COPYING file
 in the source distribution for its full text.
 */
 
-#ifndef CONFIG_H
-#define CONFIG_H
-#include "config.h"
-#endif
-
 #include "ProcessList.h"
-#include "Process.h"
-#include "Vector.h"
-#include "UsersTable.h"
-#include "Hashtable.h"
-#include "String.h"
-#include "CPUMeter.h"
 
-#include <sys/types.h>
+#include "CRT.h"
+#include "String.h"
+
+#include <sys/time.h>
+#include <sys/utsname.h>
 #include <sys/stat.h>
 #include <unistd.h>
 #include <dirent.h>
@@ -26,14 +19,21 @@ in the source distribution for its full text.
 #include <stdio.h>
 #include <signal.h>
 #include <stdbool.h>
-#include <sys/utsname.h>
 #include <stdarg.h>
 #include <math.h>
-
-#include "debug.h"
+#include <string.h>
+#include <time.h>
 #include <assert.h>
+#include <sys/types.h>
+#include <fcntl.h>
+#include <errno.h>
 
 /*{
+#include "Vector.h"
+#include "Hashtable.h"
+#include "UsersTable.h"
+#include "Panel.h"
+#include "Process.h"
 
 #ifndef PROCDIR
 #define PROCDIR "/proc"
@@ -55,9 +55,20 @@ in the source distribution for its full text.
 #define MAX_READ 2048
 #endif
 
-}*/
+#ifndef ProcessList_cpuId
+#define ProcessList_cpuId(pl, cpu) ((pl)->countCPUsFromZero ? (cpu) : (cpu)+1)
+#endif
 
-/*{
+typedef enum TreeStr_ {
+   TREE_STR_HORZ,
+   TREE_STR_VERT,
+   TREE_STR_RTEE,
+   TREE_STR_BEND,
+   TREE_STR_TEND,
+   TREE_STR_OPEN,
+   TREE_STR_SHUT,
+   TREE_STR_COUNT
+} TreeStr;
 
 typedef struct CPUData_ {
    unsigned long long int totalTime;
@@ -88,10 +99,17 @@ typedef struct CPUData_ {
 } CPUData;
 
 typedef struct ProcessList_ {
+   const char **treeStr;
    Vector* processes;
    Vector* processes2;
    Hashtable* processTable;
    UsersTable* usersTable;
+
+   Panel* panel;
+   int following;
+   uid_t userId;
+   const char* incFilter;
+   Hashtable* pidWhiteList;
 
    int cpuCount;
    int totalTasks;
@@ -99,6 +117,10 @@ typedef struct ProcessList_ {
    int kernelThreads;
    int runningTasks;
 
+   #ifdef HAVE_LIBHWLOC
+   hwloc_topology_t topology;
+   bool topologyOk;
+   #endif
    CPUData* cpus;
 
    unsigned long long int totalMem;
@@ -111,6 +133,7 @@ typedef struct ProcessList_ {
    unsigned long long int usedSwap;
    unsigned long long int freeSwap;
 
+   int flags;
    ProcessField* fields;
    ProcessField sortKey;
    int direction;
@@ -125,25 +148,68 @@ typedef struct ProcessList_ {
    bool highlightMegabytes;
    bool highlightThreads;
    bool detailedCPUTime;
+   bool countCPUsFromZero;
+   bool updateProcessNames;
+   bool accountGuestInCPUMeter;
+   bool userOnly;
 
 } ProcessList;
+
 }*/
 
 static ProcessField defaultHeaders[] = { PID, USER, PRIORITY, NICE, M_SIZE, M_RESIDENT, M_SHARE, STATE, PERCENT_CPU, PERCENT_MEM, TIME, COMM, 0 };
 
-ProcessList* ProcessList_new(UsersTable* usersTable) {
+const char *ProcessList_treeStrAscii[TREE_STR_COUNT] = {
+   "-", // TREE_STR_HORZ
+   "|", // TREE_STR_VERT
+   "`", // TREE_STR_RTEE
+   "`", // TREE_STR_BEND
+   ",", // TREE_STR_TEND
+   "+", // TREE_STR_OPEN
+   "-", // TREE_STR_SHUT
+};
+
+const char *ProcessList_treeStrUtf8[TREE_STR_COUNT] = {
+   "\xe2\x94\x80", // TREE_STR_HORZ ─
+   "\xe2\x94\x82", // TREE_STR_VERT │
+   "\xe2\x94\x9c", // TREE_STR_RTEE ├
+   "\xe2\x94\x94", // TREE_STR_BEND └
+   "\xe2\x94\x8c", // TREE_STR_TEND ┌
+   "+",            // TREE_STR_OPEN +
+   "\xe2\x94\x80", // TREE_STR_SHUT ─
+};
+
+static ssize_t xread(int fd, void *buf, size_t count) {
+  // Read some bytes. Retry on EINTR and when we don't get as many bytes as we requested.
+  size_t alreadyRead = 0;
+  for(;;) {
+     ssize_t res = read(fd, buf, count);
+     if (res == -1 && errno == EINTR) continue;
+     if (res > 0) {
+       buf = ((char*)buf)+res;
+       count -= res;
+       alreadyRead += res;
+     }
+     if (res == -1) return -1;
+     if (count == 0 || res == 0) return alreadyRead;
+  }
+}
+
+ProcessList* ProcessList_new(UsersTable* usersTable, Hashtable* pidWhiteList) {
    ProcessList* this;
-   this = malloc(sizeof(ProcessList));
-   this->processes = Vector_new(PROCESS_CLASS, true, DEFAULT_SIZE, Process_compare);
-   this->processTable = Hashtable_new(70, false);
-   assert(Hashtable_count(this->processTable) == Vector_count(this->processes));
+   this = calloc(1, sizeof(ProcessList));
+   this->processes = Vector_new(Class(Process), true, DEFAULT_SIZE);
+   this->processTable = Hashtable_new(140, false);
    this->usersTable = usersTable;
+   this->pidWhiteList = pidWhiteList;
    
    /* tree-view auxiliary buffers */
-   this->processes2 = Vector_new(PROCESS_CLASS, true, DEFAULT_SIZE, Process_compare);
+   this->processes2 = Vector_new(Class(Process), true, DEFAULT_SIZE);
    
    FILE* file = fopen(PROCSTATFILE, "r");
-   assert(file != NULL);
+   if (file == NULL) {
+      CRT_fatalError("Cannot open " PROCSTATFILE);
+   }
    char buffer[256];
    int cpus = -1;
    do {
@@ -151,20 +217,32 @@ ProcessList* ProcessList_new(UsersTable* usersTable) {
       fgets(buffer, 255, file);
    } while (String_startsWith(buffer, "cpu"));
    fclose(file);
-   this->cpuCount = cpus - 1;
-   
-   this->cpus = calloc(sizeof(CPUData), cpus);
+   this->cpuCount = MAX(cpus - 1, 1);
+
+#ifdef HAVE_LIBHWLOC
+   this->topologyOk = false;
+   int topoErr = hwloc_topology_init(&this->topology);
+   if (topoErr == 0) {
+      topoErr = hwloc_topology_load(this->topology);
+   }
+   if (topoErr == 0) {
+      this->topologyOk = true;
+   }
+#endif
+   this->cpus = calloc(cpus, sizeof(CPUData));
 
    for (int i = 0; i < cpus; i++) {
       this->cpus[i].totalTime = 1;
       this->cpus[i].totalPeriod = 1;
    }
 
-   this->fields = calloc(sizeof(ProcessField), LAST_PROCESSFIELD+1);
+   this->fields = calloc(LAST_PROCESSFIELD+1, sizeof(ProcessField));
    // TODO: turn 'fields' into a Vector,
    // (and ProcessFields into proper objects).
+   this->flags = 0;
    for (int i = 0; defaultHeaders[i]; i++) {
       this->fields[i] = defaultHeaders[i];
+      this->fields[i] |= Process_fieldFlags[defaultHeaders[i]];
    }
    this->sortKey = PERCENT_CPU;
    this->direction = 1;
@@ -178,6 +256,13 @@ ProcessList* ProcessList_new(UsersTable* usersTable) {
    this->highlightBaseName = false;
    this->highlightMegabytes = false;
    this->detailedCPUTime = false;
+   this->countCPUsFromZero = false;
+   this->updateProcessNames = false;
+   this->treeStr = NULL;
+   this->following = -1;
+
+   if (CRT_utf8)
+      this->treeStr = CRT_utf8 ? ProcessList_treeStrUtf8 : ProcessList_treeStrAscii;
 
    return this;
 }
@@ -189,6 +274,10 @@ void ProcessList_delete(ProcessList* this) {
    free(this->cpus);
    free(this->fields);
    free(this);
+}
+
+void ProcessList_setPanel(ProcessList* this, Panel* panel) {
+   this->panel = panel;
 }
 
 void ProcessList_invertSortOrder(ProcessList* this) {
@@ -203,7 +292,7 @@ void ProcessList_printHeader(ProcessList* this, RichString* header) {
    ProcessField* fields = this->fields;
    for (int i = 0; fields[i]; i++) {
       const char* field = Process_fieldTitles[fields[i]];
-      if (this->sortKey == fields[i])
+      if (!this->treeView && this->sortKey == fields[i])
          RichString_append(header, CRT_colors[PANEL_HIGHLIGHT_FOCUS], field);
       else
          RichString_append(header, CRT_colors[PANEL_HEADER_FOCUS], field);
@@ -244,7 +333,7 @@ int ProcessList_size(ProcessList* this) {
 }
 
 static void ProcessList_buildTree(ProcessList* this, pid_t pid, int level, int indent, int direction, bool show) {
-   Vector* children = Vector_new(PROCESS_CLASS, false, DEFAULT_SIZE, Process_compare);
+   Vector* children = Vector_new(Class(Process), false, DEFAULT_SIZE);
 
    for (int i = Vector_size(this->processes) - 1; i >= 0; i--) {
       Process* process = (Process*) (Vector_get(this->processes, i));
@@ -266,14 +355,17 @@ static void ProcessList_buildTree(ProcessList* this, pid_t pid, int level, int i
       assert(this->processes2->items == s+1); (void)s;
       int nextIndent = indent | (1 << level);
       ProcessList_buildTree(this, process->pid, level+1, (i < size - 1) ? nextIndent : indent, direction, show ? process->showChildren : false);
-      process->indent = nextIndent;
+      if (i == size - 1)
+         process->indent = -nextIndent;
+      else
+         process->indent = nextIndent;
    }
    Vector_delete(children);
 }
 
 void ProcessList_sort(ProcessList* this) {
    if (!this->treeView) {
-      Vector_sort(this->processes);
+      Vector_insertionSort(this->processes);
    } else {
       // Save settings
       int direction = this->direction;
@@ -281,7 +373,7 @@ void ProcessList_sort(ProcessList* this) {
       // Sort by PID
       this->sortKey = PID;
       this->direction = 1;
-      Vector_sort(this->processes);
+      Vector_quickSort(this->processes);
       // Restore settings
       this->sortKey = sortKey;
       this->direction = direction;
@@ -314,46 +406,77 @@ void ProcessList_sort(ProcessList* this) {
 static bool ProcessList_readStatFile(Process *process, const char* dirname, const char* name, char* command) {
    char filename[MAX_NAME+1];
    snprintf(filename, MAX_NAME, "%s/%s/stat", dirname, name);
-   FILE* file = fopen(filename, "r");
-   if (!file)
+   int fd = open(filename, O_RDONLY);
+   if (fd == -1)
       return false;
 
-   static char buf[MAX_READ];
+   static char buf[MAX_READ+1];
 
-   int size = fread(buf, 1, MAX_READ, file);
-   if (!size) { fclose(file); return false; }
+   int size = xread(fd, buf, MAX_READ);
+   close(fd);
+   if (size <= 0) return false;
+   buf[size] = '\0';
 
    assert(process->pid == atoi(buf));
    char *location = strchr(buf, ' ');
-   if (!location) { fclose(file); return false; }
+   if (!location) return false;
 
    location += 2;
    char *end = strrchr(location, ')');
-   if (!end) { fclose(file); return false; }
+   if (!end) return false;
    
    int commsize = end - location;
    memcpy(command, location, commsize);
    command[commsize] = '\0';
    location = end + 2;
 
-   int num = sscanf(location, 
-      "%c %d %u %u %u "
-      "%d %lu "
-      "%*u %*u %*u %*u "
-      "%lu %lu %ld %ld "
-      "%ld %ld %ld "
-      "%*d %*u %*u %*d %*u %*u %*u %*u %*u %*u %*u %*u %*u %*u %*u %*u %*u "
-      "%d %d",
-      &process->state, &process->ppid, &process->pgrp, &process->session, &process->tty_nr, 
-      &process->tpgid, &process->flags,
-      &process->utime, &process->stime, &process->cutime, &process->cstime, 
-      &process->priority, &process->nice, &process->nlwp,
-      &process->exit_signal, &process->processor);
-   fclose(file);
-   return (num == 16);
+   process->state = location[0];
+   location += 2;
+   process->ppid = strtol(location, &location, 10);
+   location += 1;
+   process->pgrp = strtoul(location, &location, 10);
+   location += 1;
+   process->session = strtoul(location, &location, 10);
+   location += 1;
+   process->tty_nr = strtoul(location, &location, 10);
+   location += 1;
+   process->tpgid = strtol(location, &location, 10);
+   location += 1;
+   process->flags = strtoul(location, &location, 10);
+   location += 1;
+   process->minflt = strtoull(location, &location, 10);
+   location += 1;
+   process->cminflt = strtoull(location, &location, 10);
+   location += 1;
+   process->majflt = strtoull(location, &location, 10);
+   location += 1;
+   process->cmajflt = strtoull(location, &location, 10);
+   location += 1;
+   process->utime = strtoull(location, &location, 10);
+   location += 1;
+   process->stime = strtoull(location, &location, 10);
+   location += 1;
+   process->cutime = strtoull(location, &location, 10);
+   location += 1;
+   process->cstime = strtoull(location, &location, 10);
+   location += 1;
+   process->priority = strtol(location, &location, 10);
+   location += 1;
+   process->nice = strtol(location, &location, 10);
+   location += 1;
+   process->nlwp = strtol(location, &location, 10);
+   location += 1;
+   for (int i=0; i<17; i++) location = strchr(location, ' ')+1;
+   process->exit_signal = strtol(location, &location, 10);
+   location += 1;
+   assert(location != NULL);
+   process->processor = strtol(location, &location, 10);
+   assert(location == NULL);
+
+   return true;
 }
 
-static bool ProcessList_statProcessDir(Process* process, const char* dirname, char* name) {
+static bool ProcessList_statProcessDir(Process* process, const char* dirname, char* name, time_t curTime) {
    char filename[MAX_NAME+1];
    filename[MAX_NAME] = '\0';
 
@@ -368,49 +491,65 @@ static bool ProcessList_statProcessDir(Process* process, const char* dirname, ch
    time_t ctime = sstat.st_ctime;
    process->starttime_ctime = ctime;
    (void) localtime_r((time_t*) &ctime, &date);
-   strftime(process->starttime_show, 7, ((ctime > time(NULL) - 86400) ? "%R " : "%b%d "), &date);
+   strftime(process->starttime_show, 7, ((ctime > curTime - 86400) ? "%R " : "%b%d "), &date);
    
    return true;
 }
 
 #ifdef HAVE_TASKSTATS
 
-static void ProcessList_readIoFile(Process* process, const char* dirname, char* name) {
+static void ProcessList_readIoFile(Process* process, const char* dirname, char* name, unsigned long long now) {
    char filename[MAX_NAME+1];
    filename[MAX_NAME] = '\0';
 
    snprintf(filename, MAX_NAME, "%s/%s/io", dirname, name);
-   FILE* file = fopen(filename, "r");
-   if (!file)
+   int fd = open(filename, O_RDONLY);
+   if (fd == -1)
       return;
    
-   char buffer[256];
-   buffer[255] = '\0';
-   struct timeval tv;
-   gettimeofday(&tv,NULL);
-   unsigned long long now = tv.tv_sec*1000+tv.tv_usec/1000;
+   char buffer[1024];
+   ssize_t buflen = xread(fd, buffer, 1023);
+   close(fd);
+   if (buflen < 1) return;
+   buffer[buflen] = '\0';
    unsigned long long last_read = process->io_read_bytes;
    unsigned long long last_write = process->io_write_bytes;
-   while (fgets(buffer, 255, file)) {
-      if (sscanf(buffer, "rchar: %llu", &process->io_rchar)) continue;
-      if (sscanf(buffer, "wchar: %llu", &process->io_wchar)) continue;
-      if (sscanf(buffer, "syscr: %llu", &process->io_syscr)) continue;
-      if (sscanf(buffer, "syscw: %llu", &process->io_syscw)) continue;
-      if (sscanf(buffer, "read_bytes: %llu", &process->io_read_bytes)) {
-         process->io_rate_read_bps = 
-            ((double)(process->io_read_bytes - last_read))/(((double)(now - process->io_rate_read_time))/1000);
-         process->io_rate_read_time = now;
-         continue;
+   char *buf = buffer;
+   char *line = NULL;
+   while ((line = strsep(&buf, "\n")) != NULL) {
+      switch (line[0]) {
+      case 'r':
+         if (line[1] == 'c' && strncmp(line+2, "har: ", 5) == 0)
+            process->io_rchar = strtoull(line+7, NULL, 10);
+         else if (strncmp(line+1, "ead_bytes: ", 11) == 0) {
+            process->io_read_bytes = strtoull(line+12, NULL, 10);
+            process->io_rate_read_bps = 
+               ((double)(process->io_read_bytes - last_read))/(((double)(now - process->io_rate_read_time))/1000);
+            process->io_rate_read_time = now;
+         }
+         break;
+      case 'w':
+         if (line[1] == 'c' && strncmp(line+2, "har: ", 5) == 0)
+            process->io_wchar = strtoull(line+7, NULL, 10);
+         else if (strncmp(line+1, "rite_bytes: ", 12) == 0) {
+            process->io_write_bytes = strtoull(line+13, NULL, 10);
+            process->io_rate_write_bps = 
+               ((double)(process->io_write_bytes - last_write))/(((double)(now - process->io_rate_write_time))/1000);
+            process->io_rate_write_time = now;
+         }
+         break;
+      case 's':
+         if (line[5] == 'r' && strncmp(line+1, "yscr: ", 6) == 0)
+            process->io_syscr = strtoull(line+7, NULL, 10);
+         else if (strncmp(line+1, "yscw: ", 6) == 0)
+            sscanf(line, "syscw: %32llu", &process->io_syscw);
+            process->io_syscw = strtoull(line+7, NULL, 10);
+         break;
+      case 'c':
+         if (strncmp(line+1, "ancelled_write_bytes: ", 22) == 0)
+           process->io_cancelled_write_bytes = strtoull(line+23, NULL, 10);
       }
-      if (sscanf(buffer, "write_bytes: %llu", &process->io_write_bytes)) {
-         process->io_rate_write_bps = 
-            ((double)(process->io_write_bytes - last_write))/(((double)(now - process->io_rate_write_time))/1000);
-         process->io_rate_write_time = now;
-         continue;
-      }
-      sscanf(buffer, "cancelled_write_bytes: %llu", &process->io_cancelled_write_bytes);
    }
-   fclose(file);
 }
 
 #endif
@@ -418,16 +557,24 @@ static void ProcessList_readIoFile(Process* process, const char* dirname, char* 
 static bool ProcessList_readStatmFile(Process* process, const char* dirname, const char* name) {
    char filename[MAX_NAME+1];
    snprintf(filename, MAX_NAME, "%s/%s/statm", dirname, name);
-   FILE* file = fopen(filename, "r");
-   if (!file)
+   int fd = open(filename, O_RDONLY);
+   if (fd == -1)
       return false;
+   char buf[256];
+   ssize_t rres = xread(fd, buf, 255);
+   close(fd);
+   if (rres < 1) return false;
 
-   int num = fscanf(file, "%d %d %d %d %d %d %d",
-       &process->m_size, &process->m_resident, &process->m_share, 
-       &process->m_trs, &process->m_lrs, &process->m_drs, 
-       &process->m_dt);
-   fclose(file);
-   return (num == 7);
+   char *p = buf;
+   errno = 0;
+   process->m_size = strtol(p, &p, 10); if (*p == ' ') p++;
+   process->m_resident = strtol(p, &p, 10); if (*p == ' ') p++;
+   process->m_share = strtol(p, &p, 10); if (*p == ' ') p++;
+   process->m_trs = strtol(p, &p, 10); if (*p == ' ') p++;
+   process->m_lrs = strtol(p, &p, 10); if (*p == ' ') p++;
+   process->m_drs = strtol(p, &p, 10); if (*p == ' ') p++;
+   process->m_dt = strtol(p, &p, 10);
+   return (errno == 0);
 }
 
 #ifdef HAVE_OPENVZ
@@ -444,13 +591,13 @@ static void ProcessList_readOpenVZData(Process* process, const char* dirname, co
    if (!file) 
       return;
    fscanf(file, 
-      "%*u %*s %*c %*u %*u %*u %*u %*u %*u %*u "
-      "%*u %*u %*u %*u %*u %*u %*u %*u "
-      "%*u %*u %*u %*u %*u %*u %*u %*u "
-      "%*u %*u %*u %*u %*u %*u %*u %*u "
-      "%*u %*u %*u %*u %*u %*u %*u %*u "
-      "%*u %*u %*u %*u %*u %*u %*u "
-      "%*u %*u %u %u",
+      "%*32u %*32s %*1c %*32u %*32u %*32u %*32u %*32u %*32u %*32u "
+      "%*32u %*32u %*32u %*32u %*32u %*32u %*32u %*32u "
+      "%*32u %*32u %*32u %*32u %*32u %*32u %*32u %*32u "
+      "%*32u %*32u %*32u %*32u %*32u %*32u %*32u %*32u "
+      "%*32u %*32u %*32u %*32u %*32u %*32u %*32u %*32u "
+      "%*32u %*32u %*32u %*32u %*32u %*32u %*32u "
+      "%*32u %*32u %32u %32u",
       &process->vpid, &process->ctid);
    fclose(file);
 }
@@ -471,10 +618,14 @@ static void ProcessList_readCGroupFile(Process* process, const char* dirname, co
    char *ok = fgets(buffer, 255, file);
    if (ok) {
       char* trimmed = String_trim(buffer);
-      char** fields = String_split(trimmed, ':');
+      int nFields;
+      char** fields = String_split(trimmed, ':', &nFields);
       free(trimmed);
-
-      process->cgroup = strndup(fields[2] + 1, 10);
+      if (nFields >= 3) {
+         process->cgroup = strndup(fields[2] + 1, 10);
+      } else {
+         process->cgroup = strdup("");
+      }
       String_freeArray(fields);
    }
    fclose(file);
@@ -495,7 +646,7 @@ static void ProcessList_readVServerData(Process* process, const char* dirname, c
    while (fgets(buffer, 255, file)) {
       if (String_startsWith(buffer, "VxID:")) {
          int vxid;
-         int ok = sscanf(buffer, "VxID:\t%d", &vxid);
+         int ok = sscanf(buffer, "VxID:\t%32d", &vxid);
          if (ok >= 1) {
             process->vxid = vxid;
          }
@@ -503,7 +654,7 @@ static void ProcessList_readVServerData(Process* process, const char* dirname, c
       #if defined HAVE_ANCIENT_VSERVER
       else if (String_startsWith(buffer, "s_context:")) {
          int vxid;
-         int ok = sscanf(buffer, "s_context:\t%d", &vxid);
+         int ok = sscanf(buffer, "s_context:\t%32d", &vxid);
          if (ok >= 1) {
             process->vxid = vxid;
          }
@@ -515,34 +666,70 @@ static void ProcessList_readVServerData(Process* process, const char* dirname, c
 
 #endif
 
+#ifdef HAVE_OOM
+
+static void ProcessList_readOomData(Process* process, const char* dirname, const char* name) {
+   char filename[MAX_NAME+1];
+   snprintf(filename, MAX_NAME, "%s/%s/oom_score", dirname, name);
+   FILE* file = fopen(filename, "r");
+   if (!file)
+      return;
+   char buffer[256];
+   if (fgets(buffer, 255, file)) {
+      unsigned int oom;
+      int ok = sscanf(buffer, "%32u", &oom);
+      if (ok >= 1) {
+         process->oom = oom;
+      }
+   }
+   fclose(file);
+}
+
+#endif
+
 static bool ProcessList_readCmdlineFile(Process* process, const char* dirname, const char* name) {
    if (Process_isKernelThread(process))
       return true;
+
    char filename[MAX_NAME+1];
    snprintf(filename, MAX_NAME, "%s/%s/cmdline", dirname, name);
-   FILE* file = fopen(filename, "r");
-   if (!file)
+   int fd = open(filename, O_RDONLY);
+   if (fd == -1)
       return false;
          
    char command[4096+1]; // max cmdline length on Linux
-   int amtRead = fread(command, 1, sizeof(command) - 1, file);
+   int amtRead = xread(fd, command, sizeof(command) - 1);
+   close(fd);
+   int tokenEnd = 0; 
    if (amtRead > 0) {
       for (int i = 0; i < amtRead; i++)
          if (command[i] == '\0' || command[i] == '\n') {
+            if (tokenEnd == 0) {
+               tokenEnd = i;
+            }
             command[i] = ' ';
          }
    }
+   if (tokenEnd == 0) {
+      tokenEnd = amtRead;
+   }
    command[amtRead] = '\0';
-   fclose(file);
    free(process->comm);
-   process->comm = String_copy(command);
+   process->comm = strdup(command);
+   process->basenameOffset = tokenEnd;
+
    return true;
 }
 
 
-static bool ProcessList_processEntries(ProcessList* this, const char* dirname, Process* parent, float period) {
+static bool ProcessList_processEntries(ProcessList* this, const char* dirname, Process* parent, double period, struct timeval tv) {
    DIR* dir;
    struct dirent* entry;
+
+   time_t curTime = tv.tv_sec;
+   #ifdef HAVE_TASKSTATS
+   unsigned long long now = tv.tv_sec*1000LL+tv.tv_usec/1000LL;
+   #endif
 
    dir = opendir(dirname);
    if (!dir) return false;
@@ -551,17 +738,24 @@ static bool ProcessList_processEntries(ProcessList* this, const char* dirname, P
    bool hideUserlandThreads = this->hideUserlandThreads;
    while ((entry = readdir(dir)) != NULL) {
       char* name = entry->d_name;
+
+      // The RedHat kernel hides threads with a dot.
+      // I believe this is non-standard.
+      if ((!this->hideThreads) && name[0] == '.') {
+         name++;
+      }
+
+      // Just skip all non-number directories.
+      if (name[0] < '0' || name[0] > '9') {
+         continue;
+      }
+
       // filename is a number: process directory
       int pid = atoi(name);
      
       if (parent && pid == parent->pid)
          continue;
 
-      // The RedHat kernel hides threads with a dot.
-      // I believe this is non-standard.
-      if ((!this->hideThreads) && pid == 0 && name[0] == '.') {
-         pid = atoi(name + 1);
-      }
       if (pid <= 0) 
          continue;
 
@@ -581,10 +775,11 @@ static bool ProcessList_processEntries(ProcessList* this, const char* dirname, P
 
       char subdirname[MAX_NAME+1];
       snprintf(subdirname, MAX_NAME, "%s/%s/task", dirname, name);
-      ProcessList_processEntries(this, subdirname, process, period);
+      ProcessList_processEntries(this, subdirname, process, period, tv);
 
       #ifdef HAVE_TASKSTATS
-      ProcessList_readIoFile(process, dirname, name);
+      if (this->flags & PROCESS_FLAG_IO)
+         ProcessList_readIoFile(process, dirname, name, now);
       #endif
 
       if (! ProcessList_readStatmFile(process, dirname, name))
@@ -593,43 +788,62 @@ static bool ProcessList_processEntries(ProcessList* this, const char* dirname, P
       process->show = ! ((hideKernelThreads && Process_isKernelThread(process)) || (hideUserlandThreads && Process_isUserlandThread(process)));
 
       char command[MAX_NAME+1];
-      int lasttimes = (process->utime + process->stime);
+      unsigned long long int lasttimes = (process->utime + process->stime);
       if (! ProcessList_readStatFile(process, dirname, name, command))
          goto errorReadingProcess;
-      int percent_cpu = (process->utime + process->stime - lasttimes) / period * 100.0;
+      if (this->flags & PROCESS_FLAG_IOPRIO)
+         Process_updateIOPriority(process);
+      float percent_cpu = (process->utime + process->stime - lasttimes) / period * 100.0;
       process->percent_cpu = MAX(MIN(percent_cpu, cpus*100.0), 0.0);
       if (isnan(process->percent_cpu)) process->percent_cpu = 0.0;
-      process->percent_mem = (process->m_resident * PAGE_SIZE_KB) / (float)(this->totalMem) * 100.0;
+      process->percent_mem = (process->m_resident * PAGE_SIZE_KB) / (double)(this->totalMem) * 100.0;
 
       if(!existingProcess) {
 
-         if (! ProcessList_statProcessDir(process, dirname, name))
+         if (! ProcessList_statProcessDir(process, dirname, name, curTime))
             goto errorReadingProcess;
 
          process->user = UsersTable_getRef(this->usersTable, process->st_uid);
 
          #ifdef HAVE_OPENVZ
-         ProcessList_readOpenVZData(process, dirname, name);
+         if (this->flags & PROCESS_FLAG_OPENVZ)
+            ProcessList_readOpenVZData(process, dirname, name);
          #endif
 
          #ifdef HAVE_CGROUP
-         ProcessList_readCGroupFile(process, dirname, name);
+         if (this->flags & PROCESS_FLAG_CGROUP)
+            ProcessList_readCGroupFile(process, dirname, name);
          #endif
          
          #ifdef HAVE_VSERVER
-         ProcessList_readVServerData(process, dirname, name);
+         if (this->flags & PROCESS_FLAG_VSERVER)
+            ProcessList_readVServerData(process, dirname, name);
          #endif
          
+         #ifdef HAVE_OOM
+         ProcessList_readOomData(process, dirname, name);
+         #endif
+
          if (! ProcessList_readCmdlineFile(process, dirname, name))
             goto errorReadingProcess;
 
          ProcessList_add(this, process);
+      } else {
+         if (this->updateProcessNames) {
+            if (! ProcessList_readCmdlineFile(process, dirname, name))
+               goto errorReadingProcess;
+         }
       }
 
-      if (Process_isThread(process)) {
+      if (process->state == 'Z') {
+         free(process->comm);
+         process->basenameOffset = -1;
+         process->comm = strdup(command);
+      } else if (Process_isThread(process)) {
          if (this->showThreadNames || Process_isKernelThread(process) || process->state == 'Z') {
             free(process->comm);
-            process->comm = String_copy(command);
+            process->basenameOffset = -1;
+            process->comm = strdup(command);
          } else if (this->showingThreadNames) {
             if (! ProcessList_readCmdlineFile(process, dirname, name))
                goto errorReadingProcess;
@@ -652,6 +866,7 @@ static bool ProcessList_processEntries(ProcessList* this, const char* dirname, P
       errorReadingProcess: {
          if (process->comm) {
             free(process->comm);
+            process->basenameOffset = -1;
             process->comm = NULL;
          }
          if (existingProcess)
@@ -665,12 +880,15 @@ static bool ProcessList_processEntries(ProcessList* this, const char* dirname, P
 }
 
 void ProcessList_scan(ProcessList* this) {
-   unsigned long long int usertime, nicetime, systemtime, systemalltime, idlealltime, idletime, totaltime, virtalltime;
+   unsigned long long int usertime, nicetime, systemtime, idletime;
    unsigned long long int swapFree = 0;
 
    FILE* file = fopen(PROCMEMINFOFILE, "r");
-   assert(file != NULL);
+   if (file == NULL) {
+      CRT_fatalError("Cannot open " PROCMEMINFOFILE);
+   }
    int cpus = this->cpuCount;
+   assert(cpus > 0);
    {
       char buffer[128];
       while (fgets(buffer, 128, file)) {
@@ -678,25 +896,25 @@ void ProcessList_scan(ProcessList* this) {
          switch (buffer[0]) {
          case 'M':
             if (String_startsWith(buffer, "MemTotal:"))
-               sscanf(buffer, "MemTotal: %llu kB", &this->totalMem);
+               sscanf(buffer, "MemTotal: %32llu kB", &this->totalMem);
             else if (String_startsWith(buffer, "MemFree:"))
-               sscanf(buffer, "MemFree: %llu kB", &this->freeMem);
+               sscanf(buffer, "MemFree: %32llu kB", &this->freeMem);
             else if (String_startsWith(buffer, "MemShared:"))
-               sscanf(buffer, "MemShared: %llu kB", &this->sharedMem);
+               sscanf(buffer, "MemShared: %32llu kB", &this->sharedMem);
             break;
          case 'B':
             if (String_startsWith(buffer, "Buffers:"))
-               sscanf(buffer, "Buffers: %llu kB", &this->buffersMem);
+               sscanf(buffer, "Buffers: %32llu kB", &this->buffersMem);
             break;
          case 'C':
             if (String_startsWith(buffer, "Cached:"))
-               sscanf(buffer, "Cached: %llu kB", &this->cachedMem);
+               sscanf(buffer, "Cached: %32llu kB", &this->cachedMem);
             break;
          case 'S':
             if (String_startsWith(buffer, "SwapTotal:"))
-               sscanf(buffer, "SwapTotal: %llu kB", &this->totalSwap);
+               sscanf(buffer, "SwapTotal: %32llu kB", &this->totalSwap);
             if (String_startsWith(buffer, "SwapFree:"))
-               sscanf(buffer, "SwapFree: %llu kB", &swapFree);
+               sscanf(buffer, "SwapFree: %32llu kB", &swapFree);
             break;
          }
       }
@@ -707,28 +925,34 @@ void ProcessList_scan(ProcessList* this) {
    fclose(file);
 
    file = fopen(PROCSTATFILE, "r");
-   assert(file != NULL);
+   if (file == NULL) {
+      CRT_fatalError("Cannot open " PROCSTATFILE);
+   }
    for (int i = 0; i <= cpus; i++) {
       char buffer[256];
       int cpuid;
-      unsigned long long int ioWait, irq, softIrq, steal, guest;
-      ioWait = irq = softIrq = steal = guest = 0;
+      unsigned long long int ioWait, irq, softIrq, steal, guest, guestnice;
+      unsigned long long int systemalltime, idlealltime, totaltime, virtalltime;
+      ioWait = irq = softIrq = steal = guest = guestnice = 0;
       // Dependending on your kernel version,
-      // 5, 7 or 8 of these fields will be set.
+      // 5, 7, 8 or 9 of these fields will be set.
       // The rest will remain at zero.
       fgets(buffer, 255, file);
       if (i == 0)
-         sscanf(buffer, "cpu  %llu %llu %llu %llu %llu %llu %llu %llu %llu", &usertime, &nicetime, &systemtime, &idletime, &ioWait, &irq, &softIrq, &steal, &guest);
+         sscanf(buffer, "cpu  %16llu %16llu %16llu %16llu %16llu %16llu %16llu %16llu %16llu %16llu", &usertime, &nicetime, &systemtime, &idletime, &ioWait, &irq, &softIrq, &steal, &guest, &guestnice);
       else {
-         sscanf(buffer, "cpu%d %llu %llu %llu %llu %llu %llu %llu %llu %llu", &cpuid, &usertime, &nicetime, &systemtime, &idletime, &ioWait, &irq, &softIrq, &steal, &guest);
+         sscanf(buffer, "cpu%4d %16llu %16llu %16llu %16llu %16llu %16llu %16llu %16llu %16llu %16llu", &cpuid, &usertime, &nicetime, &systemtime, &idletime, &ioWait, &irq, &softIrq, &steal, &guest, &guestnice);
          assert(cpuid == i - 1);
       }
+      // Guest time is already accounted in usertime
+      usertime = usertime - guest;
+      nicetime = nicetime - guestnice;
       // Fields existing on kernels >= 2.6
       // (and RHEL's patched kernel 2.4...)
       idlealltime = idletime + ioWait;
       systemalltime = systemtime + irq + softIrq;
-      virtalltime = steal + guest;
-      totaltime = usertime + nicetime + systemalltime + idlealltime + virtalltime;
+      virtalltime = guest + guestnice;
+      totaltime = usertime + nicetime + systemalltime + idlealltime + steal + virtalltime;
       CPUData* cpuData = &(this->cpus[i]);
       assert (usertime >= cpuData->userTime);
       assert (nicetime >= cpuData->niceTime);
@@ -741,7 +965,7 @@ void ProcessList_scan(ProcessList* this) {
       assert (irq >= cpuData->irqTime);
       assert (softIrq >= cpuData->softIrqTime);
       assert (steal >= cpuData->stealTime);
-      assert (guest >= cpuData->guestTime);
+      assert (virtalltime >= cpuData->guestTime);
       cpuData->userPeriod = usertime - cpuData->userTime;
       cpuData->nicePeriod = nicetime - cpuData->niceTime;
       cpuData->systemPeriod = systemtime - cpuData->systemTime;
@@ -752,7 +976,7 @@ void ProcessList_scan(ProcessList* this) {
       cpuData->irqPeriod = irq - cpuData->irqTime;
       cpuData->softIrqPeriod = softIrq - cpuData->softIrqTime;
       cpuData->stealPeriod = steal - cpuData->stealTime;
-      cpuData->guestPeriod = guest - cpuData->guestTime;
+      cpuData->guestPeriod = virtalltime - cpuData->guestTime;
       cpuData->totalPeriod = totaltime - cpuData->totalTime;
       cpuData->userTime = usertime;
       cpuData->niceTime = nicetime;
@@ -764,10 +988,10 @@ void ProcessList_scan(ProcessList* this) {
       cpuData->irqTime = irq;
       cpuData->softIrqTime = softIrq;
       cpuData->stealTime = steal;
-      cpuData->guestTime = guest;
+      cpuData->guestTime = virtalltime;
       cpuData->totalTime = totaltime;
    }
-   float period = (float)this->cpus[0].totalPeriod / cpus; fclose(file);
+   double period = (double)this->cpus[0].totalPeriod / cpus; fclose(file);
 
    // mark all process as "dirty"
    for (int i = 0; i < Vector_size(this->processes); i++) {
@@ -780,7 +1004,9 @@ void ProcessList_scan(ProcessList* this) {
    this->kernelThreads = 0;
    this->runningTasks = 0;
 
-   ProcessList_processEntries(this, PROCDIR, NULL, period);
+   struct timeval tv;
+   gettimeofday(&tv, NULL);
+   ProcessList_processEntries(this, PROCDIR, NULL, period, tv);
    
    this->showingThreadNames = this->showThreadNames;
    
@@ -813,5 +1039,46 @@ void ProcessList_expandTree(ProcessList* this) {
    for (int i = 0; i < size; i++) {
       Process* process = (Process*) Vector_get(this->processes, i);
       process->showChildren = true;
+   }
+}
+
+void ProcessList_rebuildPanel(ProcessList* this, bool flags, int following, bool userOnly, uid_t userId, const char* incFilter) {
+   if (!flags) {
+      following = this->following;
+      userOnly = this->userOnly;
+      userId = this->userId;
+      incFilter = this->incFilter;
+   } else {
+      this->following = following;
+      this->userOnly = userOnly;
+      this->userId = userId;
+      this->incFilter = incFilter;
+   }
+
+   int currPos = Panel_getSelectedIndex(this->panel);
+   pid_t currPid = following != -1 ? following : 0;
+   int currScrollV = this->panel->scrollV;
+
+   Panel_prune(this->panel);
+   int size = ProcessList_size(this);
+   int idx = 0;
+   for (int i = 0; i < size; i++) {
+      bool hidden = false;
+      Process* p = ProcessList_get(this, i);
+
+      if ( (!p->show)
+         || (userOnly && (p->st_uid != userId))
+         || (incFilter && !(String_contains_i(p->comm, incFilter)))
+         || (this->pidWhiteList && !Hashtable_get(this->pidWhiteList, p->pid)) )
+         hidden = true;
+
+      if (!hidden) {
+         Panel_set(this->panel, idx, (Object*)p);
+         if ((following == -1 && idx == currPos) || (following != -1 && p->pid == currPid)) {
+            Panel_setSelected(this->panel, idx);
+            this->panel->scrollV = currScrollV;
+         }
+         idx++;
+      }
    }
 }

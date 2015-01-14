@@ -20,8 +20,17 @@
 /* Define to 1 if you have the <dlfcn.h> header file. */
 #define HAVE_DLFCN_H 1
 
+/* Define to 1 if you have the <execinfo.h> header file. */
+/* #undef HAVE_EXECINFO_H */
+
+/* Define to 1 if you have the <hwloc.h> header file. */
+/* #undef HAVE_HWLOC_H */
+
 /* Define to 1 if you have the <inttypes.h> header file. */
 #define HAVE_INTTYPES_H 1
+
+/* Define to 1 if you have the `hwloc' library (-lhwloc). */
+/* #undef HAVE_LIBHWLOC */
 
 /* Define to 1 if you have the `m' library (-lm). */
 #define HAVE_LIBM 1
@@ -32,31 +41,35 @@
 /* Define to 1 if you have the `ncursesw' library (-lncursesw). */
 /* #undef HAVE_LIBNCURSESW */
 
-/* Define to 1 if your system has a GNU libc compatible `malloc' function, and
-   to 0 otherwise. */
-#define HAVE_MALLOC 1
-
 /* Define to 1 if you have the `memmove' function. */
 #define HAVE_MEMMOVE 1
 
 /* Define to 1 if you have the <memory.h> header file. */
 #define HAVE_MEMORY_H 1
 
+/* Define if native sched_setaffinity and sched_getaffinity are to be used. */
+#define HAVE_NATIVE_AFFINITY 1
+
 /* Define to 1 if you have the <ncursesw/curses.h> header file. */
 /* #undef HAVE_NCURSESW_CURSES_H */
+
+/* Define to 1 if you have the <ncurses/curses.h> header file. */
+/* #undef HAVE_NCURSES_CURSES_H */
+
+/* Define to 1 if you have the <ncurses.h> header file. */
+#define HAVE_NCURSES_H 1
+
+/* Define to 1 if you have the <ncurses/ncurses.h> header file. */
+/* #undef HAVE_NCURSES_NCURSES_H */
 
 /* Define to 1 if you have the <ndir.h> header file, and it defines `DIR'. */
 /* #undef HAVE_NDIR_H */
 
+/* Define if OOM score support enabled. */
+/* #undef HAVE_OOM */
+
 /* Define if openvz support enabled. */
 /* #undef HAVE_OPENVZ */
-
-/* Have plpa */
-#define HAVE_PLPA 1
-
-/* Define to 1 if your system has a GNU libc compatible `realloc' function,
-   and to 0 otherwise. */
-#define HAVE_REALLOC 1
 
 /* Define to 1 if `stat' has the bug that it succeeds when given the
    zero-length file name argument. */
@@ -112,9 +125,6 @@
 /* Define to 1 if you have the <unistd.h> header file. */
 #define HAVE_UNISTD_H 1
 
-/* Define to 1 if you have the <valgrind/valgrind.h> header file. */
-/* #undef HAVE_VALGRIND_VALGRIND_H */
-
 /* Define if vserver support enabled. */
 /* #undef HAVE_VSERVER */
 
@@ -136,31 +146,22 @@
 #define PACKAGE "htop"
 
 /* Define to the address where bug reports for this package should be sent. */
-#define PACKAGE_BUGREPORT "loderunner@users.sourceforge.net"
+#define PACKAGE_BUGREPORT "hisham@gobolinux.org"
 
 /* Define to the full name of this package. */
 #define PACKAGE_NAME "htop"
 
 /* Define to the full name and version of this package. */
-#define PACKAGE_STRING "htop 0.9"
+#define PACKAGE_STRING "htop 1.0.3"
 
 /* Define to the one symbol short name of this package. */
 #define PACKAGE_TARNAME "htop"
 
+/* Define to the home page for this package. */
+#define PACKAGE_URL ""
+
 /* Define to the version of this package. */
-#define PACKAGE_VERSION "0.9"
-
-/* Whether we are in debugging more or not */
-#define PLPA_DEBUG 0
-
-/* The PLPA symbol prefix */
-#define PLPA_SYM_PREFIX plpa_
-
-/* The PLPA symbol prefix in all caps */
-#define PLPA_SYM_PREFIX_CAPS PLPA_
-
-/* Whether we want Valgrind support or not */
-#define PLPA_WANT_VALGRIND_SUPPORT 0
+#define PACKAGE_VERSION "1.0.3"
 
 /* Path of proc filesystem */
 #define PROCDIR "/proc"
@@ -171,18 +172,40 @@
 /* Define to 1 if you have the ANSI C header files. */
 #define STDC_HEADERS 1
 
+/* Enable extensions on AIX 3, Interix.  */
+#ifndef _ALL_SOURCE
+# define _ALL_SOURCE 1
+#endif
+/* Enable GNU extensions on systems that have them.  */
+#ifndef _GNU_SOURCE
+# define _GNU_SOURCE 1
+#endif
+/* Enable threading extensions on Solaris.  */
+#ifndef _POSIX_PTHREAD_SEMANTICS
+# define _POSIX_PTHREAD_SEMANTICS 1
+#endif
+/* Enable extensions on HP NonStop.  */
+#ifndef _TANDEM_SOURCE
+# define _TANDEM_SOURCE 1
+#endif
+/* Enable general extensions on Solaris.  */
+#ifndef __EXTENSIONS__
+# define __EXTENSIONS__ 1
+#endif
+
+
 /* Version number of package */
-#define VERSION "0.9"
+#define VERSION "1.0.3"
 
-/* Define to 1 if `lex' declares `yytext' as a `char *' by default, not a
-   `char[]'. */
-#define YYTEXT_POINTER 1
+/* Define to 1 if on MINIX. */
+/* #undef _MINIX */
 
-/* Emulated value */
-/* #undef __NR_sched_getaffinity */
+/* Define to 2 if the system does not provide POSIX.1 features except with
+   this defined. */
+/* #undef _POSIX_1_SOURCE */
 
-/* Emulated value */
-/* #undef __NR_sched_setaffinity */
+/* Define to 1 if you need to in order for `stat' and other things to work. */
+/* #undef _POSIX_SOURCE */
 
 /* Define to empty if `const' does not conform to ANSI C. */
 /* #undef const */
@@ -190,20 +213,8 @@
 /* Define to `int' if <sys/types.h> doesn't define. */
 /* #undef gid_t */
 
-/* Define to `__inline__' or `__inline' if that's what the C compiler
-   calls it, or to nothing if 'inline' is not supported under any name.  */
-#ifndef __cplusplus
-/* #undef inline */
-#endif
-
-/* Define to rpl_malloc if the replacement function should be used. */
-/* #undef malloc */
-
 /* Define to `int' if <sys/types.h> does not define. */
 /* #undef pid_t */
-
-/* Define to rpl_realloc if the replacement function should be used. */
-/* #undef realloc */
 
 /* Define to `int' if <sys/types.h> doesn't define. */
 /* #undef uid_t */

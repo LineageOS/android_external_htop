@@ -2,15 +2,16 @@
 
 #ifndef HEADER_MetersPanel
 #define HEADER_MetersPanel
-
+/*
+htop - MetersPanel.h
+(C) 2004-2011 Hisham H. Muhammad
+Released under the GNU GPL, see the COPYING file
+in the source distribution for its full text.
+*/
 
 #include "Panel.h"
 #include "Settings.h"
 #include "ScreenManager.h"
-
-#include "debug.h"
-#include <assert.h>
-
 
 typedef struct MetersPanel_ {
    Panel super;
@@ -20,6 +21,8 @@ typedef struct MetersPanel_ {
    ScreenManager* scr;
 } MetersPanel;
 
+
+extern PanelClass MetersPanel_class;
 
 MetersPanel* MetersPanel_new(Settings* settings, const char* header, Vector* meters, ScreenManager* scr);
 

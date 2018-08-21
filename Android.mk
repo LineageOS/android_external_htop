@@ -5,6 +5,9 @@ include $(CLEAR_VARS)
 LOCAL_CFLAGS := \
     -pedantic -Wall -Wextra -std=c99 -DSYSCONFDIR=\"/system/etc\"
 
+LOCAL_CFLAGS += \
+    -Wno-gnu-include-next -Wno-enum-conversion -Wno-deprecated-declarations
+
 LOCAL_C_INCLUDES := \
     $(LOCAL_PATH) \
     $(LOCAL_PATH)/linux \

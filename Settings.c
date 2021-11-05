@@ -524,7 +524,11 @@ Settings* Settings_new(unsigned int initialCpuCount, Hashtable* dynamicColumns) 
    if (rcfile) {
       this->filename = xStrdup(rcfile);
    } else {
+#ifdef __ANDROID__
+      const char* home = "/sdcard";
+#else
       const char* home = getenv("HOME");
+#endif
       if (!home)
          home = "";
 

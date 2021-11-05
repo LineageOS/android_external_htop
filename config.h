@@ -13,6 +13,9 @@
 /* Define if cgroup support enabled. */
 /* #undef HAVE_CGROUP */
 
+/* Define to 1 if you have the `clock_gettime' function. */
+#define HAVE_CLOCK_GETTIME 1
+
 /* Define to 1 if you have the <curses.h> header file. */
 #define HAVE_CURSES_H 1
 
@@ -133,6 +136,9 @@
 
 /* Define to 1 if you have the <sys/types.h> header file. */
 #define HAVE_SYS_TYPES_H 1
+
+/* Define to 1 if you have the <sys/utsname.h> header file. */
+#define HAVE_SYS_UTSNAME_H 1
 
 /* Define if taskstats support enabled. */
 #define HAVE_TASKSTATS 1

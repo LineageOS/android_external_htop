@@ -11,6 +11,7 @@ LOCAL_CFLAGS += \
 LOCAL_C_INCLUDES := \
     $(LOCAL_PATH) \
     $(LOCAL_PATH)/linux \
+    $(LOCAL_PATH)/generic \
     external/libncurses/include
 
 LOCAL_SRC_FILES := \
@@ -21,17 +22,25 @@ LOCAL_SRC_FILES := \
     AvailableMetersPanel.c \
     BatteryMeter.c \
     CategoriesPanel.c \
-    CheckItem.c \
     ClockMeter.c \
     ColorsPanel.c \
     ColumnsPanel.c \
+    CommandLine.c \
+    CommandScreen.c \
+    Compat.c \
     CPUMeter.c \
     CRT.c \
+    DateMeter.c \
+    DateTimeMeter.c \
+    DiskIOMeter.c \
     DisplayOptionsPanel.c \
+    DynamicColumn.c \
+    DynamicMeter.c \
     EnvScreen.c \
     FunctionBar.c \
     Hashtable.c \
     Header.c \
+    HeaderOptionsPanel.c \
     HostnameMeter.c \
     htop.c \
     IncSet.c \
@@ -40,35 +49,43 @@ LOCAL_SRC_FILES := \
     LoadAverageMeter.c \
     MainPanel.c \
     MemoryMeter.c \
+    MemorySwapMeter.c \
     Meter.c \
     MetersPanel.c \
+    NetworkIOMeter.c \
     Object.c \
     OpenFilesScreen.c \
+    OptionItem.c \
     Panel.c \
     Process.c \
     ProcessList.c \
+    ProcessLocksScreen.c \
     RichString.c \
     ScreenManager.c \
     Settings.c \
     SignalsPanel.c \
-    StringUtils.c \
     SwapMeter.c \
+    SysArchMeter.c \
     TasksMeter.c \
     TraceScreen.c \
     UptimeMeter.c \
     UsersTable.c \
     Vector.c \
-    XAlloc.c \
-    linux/Battery.c \
-    linux/IOPriority.c \
+    XUtils.c \
+    generic/gettime.c \
+    generic/hostname.c \
+    generic/uname.c \
+    linux/HugePageMeter.c \
     linux/IOPriorityPanel.c \
-    linux/LinuxCRT.c \
+    linux/LibSensors.c \
     linux/LinuxProcess.c \
     linux/LinuxProcessList.c \
     linux/Platform.c \
     linux/PressureStallMeter.c \
+    linux/SELinuxMeter.c \
+    linux/SystemdMeter.c \
+    linux/ZramMeter.c \
     zfs/ZfsArcMeter.c \
-    zfs/ZfsArcStats.c \
     zfs/ZfsCompressedArcMeter.c
 
 LOCAL_SHARED_LIBRARIES := libncurses

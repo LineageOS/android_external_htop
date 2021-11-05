@@ -1711,7 +1711,7 @@ static void LinuxProcessList_scanHugePages(LinuxProcessList* this) {
 
       memory_t free = strtoull(content, NULL, 10);
 
-      int shift = ffsl(hugePageSize) - 1 - (HTOP_HUGEPAGE_BASE_SHIFT - 10);
+      int shift = __builtin_ffsl(hugePageSize) - 1 - (HTOP_HUGEPAGE_BASE_SHIFT - 10);
       assert(shift >= 0 && shift < HTOP_HUGEPAGE_COUNT);
 
       this->totalHugePageMem += total * hugePageSize;

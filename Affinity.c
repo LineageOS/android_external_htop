@@ -2,42 +2,35 @@
 htop - Affinity.c
 (C) 2004-2011 Hisham H. Muhammad
 (C) 2020 Red Hat, Inc.  All Rights Reserved.
-Released under the GNU GPL, see the COPYING file
+Released under the GNU GPLv2+, see the COPYING file
 in the source distribution for its full text.
 */
+
+#include "config.h" // IWYU pragma: keep
 
 #include "Affinity.h"
 
 #include <stdlib.h>
 
-#ifdef HAVE_LIBHWLOC
+#include "XUtils.h"
+
+#if defined(HAVE_LIBHWLOC)
 #include <hwloc.h>
-#if __linux__
+#include <hwloc/bitmap.h>
+#ifdef __linux__
 #define HTOP_HWLOC_CPUBIND_FLAG HWLOC_CPUBIND_THREAD
 #else
 #define HTOP_HWLOC_CPUBIND_FLAG HWLOC_CPUBIND_PROCESS
 #endif
-#elif HAVE_LINUX_AFFINITY
+#elif defined(HAVE_AFFINITY)
 #include <sched.h>
 #endif
 
-/*{
-#include "Process.h"
-#include "ProcessList.h"
-
-typedef struct Affinity_ {
-   ProcessList* pl;
-   int size;
-   int used;
-   int* cpus;
-} Affinity;
-
-}*/
 
 Affinity* Affinity_new(ProcessList* pl) {
    Affinity* this = xCalloc(1, sizeof(Affinity));
    this->size = 8;
-   this->cpus = xCalloc(this->size, sizeof(int));
+   this->cpus = xCalloc(this->size, sizeof(unsigned int));
    this->pl = pl;
    return this;
 }
@@ -47,32 +40,32 @@ void Affinity_delete(Affinity* this) {
    free(this);
 }
 
-void Affinity_add(Affinity* this, int id) {
+void Affinity_add(Affinity* this, unsigned int id) {
    if (this->used == this->size) {
       this->size *= 2;
-      this->cpus = xRealloc(this->cpus, sizeof(int) * this->size);
+      this->cpus = xRealloc(this->cpus, sizeof(unsigned int) * this->size);
    }
    this->cpus[this->used] = id;
    this->used++;
 }
 
 
-#ifdef HAVE_LIBHWLOC
+#if defined(HAVE_LIBHWLOC)
 
-Affinity* Affinity_get(Process* proc, ProcessList* pl) {
+Affinity* Affinity_get(const Process* proc, ProcessList* pl) {
    hwloc_cpuset_t cpuset = hwloc_bitmap_alloc();
    bool ok = (hwloc_get_proc_cpubind(pl->topology, proc->pid, cpuset, HTOP_HWLOC_CPUBIND_FLAG) == 0);
    Affinity* affinity = NULL;
    if (ok) {
       affinity = Affinity_new(pl);
       if (hwloc_bitmap_last(cpuset) == -1) {
-         for (int i = 0; i < pl->cpuCount; i++) {
+         for (unsigned int i = 0; i < pl->existingCPUs; i++) {
             Affinity_add(affinity, i);
          }
       } else {
-         unsigned int id;
-         hwloc_bitmap_foreach_begin(id, cpuset);
-            Affinity_add(affinity, id);
+         int id;
+         hwloc_bitmap_foreach_begin(id, cpuset)
+            Affinity_add(affinity, (unsigned)id);
          hwloc_bitmap_foreach_end();
       }
    }
@@ -81,9 +74,9 @@ Affinity* Affinity_get(Process* proc, ProcessList* pl) {
 }
 
 bool Affinity_set(Process* proc, Arg arg) {
-   Affinity *this = arg.v;
+   Affinity* this = arg.v;
    hwloc_cpuset_t cpuset = hwloc_bitmap_alloc();
-   for (int i = 0; i < this->used; i++) {
+   for (unsigned int i = 0; i < this->used; i++) {
       hwloc_bitmap_set(cpuset, this->cpus[i]);
    }
    bool ok = (hwloc_set_proc_cpubind(this->pl->topology, proc->pid, cpuset, HTOP_HWLOC_CPUBIND_FLAG) == 0);
@@ -91,25 +84,28 @@ bool Affinity_set(Process* proc, Arg arg) {
    return ok;
 }
 
-#elif HAVE_LINUX_AFFINITY
+#elif defined(HAVE_AFFINITY)
 
-Affinity* Affinity_get(Process* proc, ProcessList* pl) {
+Affinity* Affinity_get(const Process* proc, ProcessList* pl) {
    cpu_set_t cpuset;
    bool ok = (sched_getaffinity(proc->pid, sizeof(cpu_set_t), &cpuset) == 0);
-   if (!ok) return NULL;
+   if (!ok)
+      return NULL;
+
    Affinity* affinity = Affinity_new(pl);
-   for (int i = 0; i < pl->cpuCount; i++) {
-      if (CPU_ISSET(i, &cpuset))
+   for (unsigned int i = 0; i < pl->existingCPUs; i++) {
+      if (CPU_ISSET(i, &cpuset)) {
          Affinity_add(affinity, i);
+      }
    }
    return affinity;
 }
 
 bool Affinity_set(Process* proc, Arg arg) {
-   Affinity *this = arg.v;
+   Affinity* this = arg.v;
    cpu_set_t cpuset;
    CPU_ZERO(&cpuset);
-   for (int i = 0; i < this->used; i++) {
+   for (unsigned int i = 0; i < this->used; i++) {
       CPU_SET(this->cpus[i], &cpuset);
    }
    bool ok = (sched_setaffinity(proc->pid, sizeof(unsigned long), &cpuset) == 0);

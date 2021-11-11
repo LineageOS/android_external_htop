@@ -1,5 +1,6 @@
-# the binary:
+# the binaries:
 htop
+pcp-htop
 
 # all object files
 *.o
@@ -17,6 +18,7 @@ htop
 *.h.gch
 */.dirstamp
 
+# automake/autoconf related files
 .deps/
 Makefile
 Makefile.in
@@ -24,6 +26,7 @@ INSTALL
 aclocal.m4
 autom4te.cache/
 compile
+conf*/
 config.guess
 config.h
 config.h.in
@@ -34,10 +37,17 @@ config.sub
 configure
 depcomp
 htop.1
+pcp-htop.5
 install-sh
 libtool
 ltmain.sh
 m4/
 missing
-scripts/MakeHeader.py
 stamp-h1
+
+# files related to valgrind/callgrind
+callgrind.out.*
+
+# IDE workspace configurations
+/.idea/
+/.vscode/

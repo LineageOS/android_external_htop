@@ -2,54 +2,38 @@
 htop - ColumnsPanel.c
 (C) 2004-2015 Hisham H. Muhammad
 (C) 2020 Red Hat, Inc.  All Rights Reserved.
-Released under the GNU GPL, see the COPYING file
+Released under the GNU GPLv2+, see the COPYING file
 in the source distribution for its full text.
 */
 
 #include "MainPanel.h"
-#include "Process.h"
-#include "Platform.h"
-#include "CRT.h"
 
+#include <ctype.h>
 #include <stdlib.h>
 
-/*{
-#include "Panel.h"
-#include "Action.h"
+#include "CRT.h"
+#include "FunctionBar.h"
+#include "Platform.h"
+#include "Process.h"
+#include "ProcessList.h"
+#include "ProvideCurses.h"
 #include "Settings.h"
+#include "XUtils.h"
 
-typedef struct MainPanel_ {
-   Panel super;
-   State* state;
-   IncSet* inc;
-   Htop_Action *keys;
-   pid_t pidSearch;
-} MainPanel;
 
-typedef bool(*MainPanel_ForeachProcessFn)(Process*, Arg);
-
-#define MainPanel_getFunctionBar(this_) (((Panel*)(this_))->defaultBar)
-
-}*/
-
-static const char* const MainFunctions[]  = {"Help   ", "Setup  ", "Search ", "Filter ", "Tree   ", "SortBy ", "Nice - ", "Nice + ", "Kill   ", "Quit   ", NULL};
+static const char* const MainFunctions[]     = {"Help  ", "Setup ", "Search", "Filter", "Tree  ", "SortBy", "Nice -", "Nice +", "Kill  ", "Quit  ", NULL};
+static const char* const MainFunctions_ro[]  = {"Help  ", "Setup ", "Search", "Filter", "Tree  ", "SortBy", "      ", "      ", "      ", "Quit  ", NULL};
 
 void MainPanel_updateTreeFunctions(MainPanel* this, bool mode) {
    FunctionBar* bar = MainPanel_getFunctionBar(this);
-   if (mode) {
-      FunctionBar_setLabel(bar, KEY_F(5), "Sorted");
-      FunctionBar_setLabel(bar, KEY_F(6), "Collap");
-   } else {
-      FunctionBar_setLabel(bar, KEY_F(5), "Tree  ");
-      FunctionBar_setLabel(bar, KEY_F(6), "SortBy");
-   }
+   FunctionBar_setLabel(bar, KEY_F(5), mode ? "List  " : "Tree  ");
 }
 
-void MainPanel_pidSearch(MainPanel* this, int ch) {
+static void MainPanel_pidSearch(MainPanel* this, int ch) {
    Panel* super = (Panel*) this;
-   pid_t pid = ch-48 + this->pidSearch;
+   pid_t pid = ch - 48 + this->pidSearch;
    for (int i = 0; i < Panel_size(super); i++) {
-      Process* p = (Process*) Panel_get(super, i);
+      const Process* p = (const Process*) Panel_get(super, i);
       if (p && p->pid == pid) {
          Panel_setSelected(super, i);
          break;
@@ -61,6 +45,11 @@ void MainPanel_pidSearch(MainPanel* this, int ch) {
    }
 }
 
+static const char* MainPanel_getValue(Panel* this, int i) {
+   const Process* p = (const Process*) Panel_get(this, i);
+   return Process_getCommand(p);
+}
+
 static HandlerResult MainPanel_eventHandler(Panel* super, int ch) {
    MainPanel* this = (MainPanel*) super;
 
@@ -68,22 +57,39 @@ static HandlerResult MainPanel_eventHandler(Panel* super, int ch) {
 
    Htop_Reaction reaction = HTOP_OK;
 
+   /* Let supervising ScreenManager handle resize */
+   if (ch == KEY_RESIZE)
+      return IGNORED;
+
+   /* reset on every normal key */
+   bool needReset = ch != ERR;
+   #ifdef HAVE_GETMOUSE
+   /* except mouse events while mouse support is disabled */
+   if (!(ch != KEY_MOUSE || this->state->settings->enableMouse))
+      needReset = false;
+   #endif
+   if (needReset)
+      this->state->hideProcessSelection = false;
+
    if (EVENT_IS_HEADER_CLICK(ch)) {
       int x = EVENT_HEADER_CLICK_GET_X(ch);
-      ProcessList* pl = this->state->pl;
+      const ProcessList* pl = this->state->pl;
       Settings* settings = this->state->settings;
       int hx = super->scrollH + x + 1;
       ProcessField field = ProcessList_keyAt(pl, hx);
-      if (field == settings->sortKey) {
-         Settings_invertSortOrder(settings);
+      if (settings->treeView && settings->treeViewAlwaysByPID) {
          settings->treeView = false;
+         settings->direction = 1;
+         reaction |= Action_setSortKey(settings, field);
+      } else if (field == Settings_getActiveSortKey(settings)) {
+         Settings_invertSortOrder(settings);
       } else {
          reaction |= Action_setSortKey(settings, field);
       }
       reaction |= HTOP_RECALCULATE | HTOP_REDRAW_BAR | HTOP_SAVE_SETTINGS;
       result = HANDLED;
    } else if (ch != ERR && this->inc->active) {
-      bool filterChanged = IncSet_handleKey(this->inc, ch, super, (IncMode_GetPanelValue) MainPanel_getValue, NULL);
+      bool filterChanged = IncSet_handleKey(this->inc, ch, super, MainPanel_getValue, NULL);
       if (filterChanged) {
          this->state->pl->incFilter = IncSet_filter(this->inc);
          reaction = HTOP_REFRESH | HTOP_REDRAW_BAR;
@@ -94,11 +100,12 @@ static HandlerResult MainPanel_eventHandler(Panel* super, int ch) {
       }
       result = HANDLED;
    } else if (ch == 27) {
+      this->state->hideProcessSelection = true;
       return HANDLED;
    } else if (ch != ERR && ch > 0 && ch < KEY_MAX && this->keys[ch]) {
       reaction |= (this->keys[ch])(this->state);
       result = HANDLED;
-   } else if (isdigit(ch)) {
+   } else if (0 < ch && ch < 255 && isdigit((unsigned char)ch)) {
       MainPanel_pidSearch(this, ch);
    } else {
       if (ch != ERR) {
@@ -110,13 +117,15 @@ static HandlerResult MainPanel_eventHandler(Panel* super, int ch) {
 
    if (reaction & HTOP_REDRAW_BAR) {
       MainPanel_updateTreeFunctions(this, this->state->settings->treeView);
-      IncSet_drawBar(this->inc);
+   }
+   if (reaction & HTOP_RESIZE) {
+      result |= RESIZE;
    }
    if (reaction & HTOP_UPDATE_PANELHDR) {
-      ProcessList_printHeader(this->state->pl, Panel_getHeader(super));
+      result |= REDRAW;
    }
    if (reaction & HTOP_REFRESH) {
-      result |= REDRAW;
+      result |= REFRESH;
    }
    if (reaction & HTOP_RECALCULATE) {
       result |= RESCAN;
@@ -129,24 +138,17 @@ static HandlerResult MainPanel_eventHandler(Panel* super, int ch) {
    }
    if (!(reaction & HTOP_KEEP_FOLLOWING)) {
       this->state->pl->following = -1;
-      Panel_setSelectionColor(super, CRT_colors[PANEL_SELECTION_FOCUS]);
+      Panel_setSelectionColor(super, PANEL_SELECTION_FOCUS);
    }
    return result;
 }
 
 int MainPanel_selectedPid(MainPanel* this) {
-   Process* p = (Process*) Panel_getSelected((Panel*)this);
+   const Process* p = (const Process*) Panel_getSelected((Panel*)this);
    if (p) {
       return p->pid;
    }
    return -1;
-}
-
-const char* MainPanel_getValue(MainPanel* this, int i) {
-   Process* p = (Process*) Panel_get((Panel*)this, i);
-   if (p)
-      return p->comm;
-   return "";
 }
 
 bool MainPanel_foreachProcess(MainPanel* this, MainPanel_ForeachProcessFn fn, Arg arg, bool* wasAnyTagged) {
@@ -162,24 +164,48 @@ bool MainPanel_foreachProcess(MainPanel* this, MainPanel_ForeachProcessFn fn, Ar
    }
    if (!anyTagged) {
       Process* p = (Process*) Panel_getSelected(super);
-      if (p) ok = fn(p, arg) && ok;
+      if (p) {
+         ok &= fn(p, arg);
+      }
    }
+
    if (wasAnyTagged)
       *wasAnyTagged = anyTagged;
+
    return ok;
 }
 
-PanelClass MainPanel_class = {
+static void MainPanel_drawFunctionBar(Panel* super, bool hideFunctionBar) {
+   MainPanel* this = (MainPanel*) super;
+
+   // Do not hide active search and filter bar.
+   if (hideFunctionBar && !this->inc->active)
+      return;
+
+   IncSet_drawBar(this->inc);
+   if (this->state->pauseProcessUpdate) {
+      FunctionBar_append("PAUSED", CRT_colors[PAUSED]);
+   }
+}
+
+static void MainPanel_printHeader(Panel* super) {
+   MainPanel* this = (MainPanel*) super;
+   ProcessList_printHeader(this->state->pl, &super->header);
+}
+
+const PanelClass MainPanel_class = {
    .super = {
       .extends = Class(Panel),
       .delete = MainPanel_delete
    },
-   .eventHandler = MainPanel_eventHandler
+   .eventHandler = MainPanel_eventHandler,
+   .drawFunctionBar = MainPanel_drawFunctionBar,
+   .printHeader = MainPanel_printHeader
 };
 
 MainPanel* MainPanel_new() {
    MainPanel* this = AllocThis(MainPanel);
-   Panel_init((Panel*) this, 1, 1, 1, 1, Class(Process), false, FunctionBar_new(MainFunctions, NULL, NULL));
+   Panel_init((Panel*) this, 1, 1, 1, 1, Class(Process), false, FunctionBar_new(Settings_isReadonly() ? MainFunctions_ro : MainFunctions, NULL, NULL));
    this->keys = xCalloc(KEY_MAX, sizeof(Htop_Action));
    this->inc = IncSet_new(MainPanel_getFunctionBar(this));
 

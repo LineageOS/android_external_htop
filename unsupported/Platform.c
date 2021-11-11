@@ -2,96 +2,84 @@
 htop - unsupported/Platform.c
 (C) 2014 Hisham H. Muhammad
 (C) 2015 David C. Hunt
-Released under the GNU GPL, see the COPYING file
+Released under the GNU GPLv2+, see the COPYING file
 in the source distribution for its full text.
 */
 
-#include "Platform.h"
+#include "config.h" // IWYU pragma: keep
+
+#include "unsupported/Platform.h"
+
+#include <math.h>
+
 #include "CPUMeter.h"
-#include "MemoryMeter.h"
-#include "SwapMeter.h"
-#include "TasksMeter.h"
-#include "LoadAverageMeter.h"
 #include "ClockMeter.h"
+#include "DateMeter.h"
+#include "DateTimeMeter.h"
 #include "HostnameMeter.h"
+#include "LoadAverageMeter.h"
+#include "Macros.h"
+#include "MemoryMeter.h"
+#include "MemorySwapMeter.h"
+#include "SwapMeter.h"
+#include "SysArchMeter.h"
+#include "TasksMeter.h"
 #include "UptimeMeter.h"
 
-/*{
-#include "Action.h"
-#include "BatteryMeter.h"
-#include "SignalsPanel.h"
-#include "UnsupportedProcess.h"
-}*/
 
 const SignalItem Platform_signals[] = {
    { .name = " 0 Cancel",    .number =  0 },
 };
 
-const unsigned int Platform_numberOfSignals = sizeof(Platform_signals)/sizeof(SignalItem);
+const unsigned int Platform_numberOfSignals = ARRAYSIZE(Platform_signals);
 
-ProcessField Platform_defaultFields[] = { PID, USER, PRIORITY, NICE, M_SIZE, M_RESIDENT, STATE, PERCENT_CPU, PERCENT_MEM, TIME, COMM, 0 };
+const ProcessField Platform_defaultFields[] = { PID, USER, PRIORITY, NICE, M_VIRT, M_RESIDENT, STATE, PERCENT_CPU, PERCENT_MEM, TIME, COMM, 0 };
 
-ProcessFieldData Process_fields[] = {
-   [0] = { .name = "", .title = NULL, .description = NULL, .flags = 0, },
-   [PID] = { .name = "PID", .title = "    PID ", .description = "Process/thread ID", .flags = 0, },
-   [COMM] = { .name = "Command", .title = "Command ", .description = "Command line", .flags = 0, },
-   [STATE] = { .name = "STATE", .title = "S ", .description = "Process state (S sleeping, R running, D disk, Z zombie, T traced, W paging)", .flags = 0, },
-   [PPID] = { .name = "PPID", .title = "   PPID ", .description = "Parent process ID", .flags = 0, },
-   [PGRP] = { .name = "PGRP", .title = "   PGRP ", .description = "Process group ID", .flags = 0, },
-   [SESSION] = { .name = "SESSION", .title = "    SID ", .description = "Process's session ID", .flags = 0, },
-   [TTY_NR] = { .name = "TTY_NR", .title = "    TTY ", .description = "Controlling terminal", .flags = 0, },
-   [TPGID] = { .name = "TPGID", .title = "  TPGID ", .description = "Process ID of the fg process group of the controlling terminal", .flags = 0, },
-   [MINFLT] = { .name = "MINFLT", .title = "     MINFLT ", .description = "Number of minor faults which have not required loading a memory page from disk", .flags = 0, },
-   [MAJFLT] = { .name = "MAJFLT", .title = "     MAJFLT ", .description = "Number of major faults which have required loading a memory page from disk", .flags = 0, },
-   [PRIORITY] = { .name = "PRIORITY", .title = "PRI ", .description = "Kernel's internal priority for the process", .flags = 0, },
-   [NICE] = { .name = "NICE", .title = " NI ", .description = "Nice value (the higher the value, the more it lets other processes take priority)", .flags = 0, },
-   [STARTTIME] = { .name = "STARTTIME", .title = "START ", .description = "Time the process was started", .flags = 0, },
-
-   [PROCESSOR] = { .name = "PROCESSOR", .title = "CPU ", .description = "Id of the CPU the process last executed on", .flags = 0, },
-   [M_SIZE] = { .name = "M_SIZE", .title = " VIRT ", .description = "Total program size in virtual memory", .flags = 0, },
-   [M_RESIDENT] = { .name = "M_RESIDENT", .title = "  RES ", .description = "Resident set size, size of the text and data sections, plus stack usage", .flags = 0, },
-   [ST_UID] = { .name = "ST_UID", .title = "  UID ", .description = "User ID of the process owner", .flags = 0, },
-   [PERCENT_CPU] = { .name = "PERCENT_CPU", .title = "CPU% ", .description = "Percentage of the CPU time the process used in the last sampling", .flags = 0, },
-   [PERCENT_MEM] = { .name = "PERCENT_MEM", .title = "MEM% ", .description = "Percentage of the memory the process is using, based on resident memory size", .flags = 0, },
-   [USER] = { .name = "USER", .title = "USER      ", .description = "Username of the process owner (or user ID if name cannot be determined)", .flags = 0, },
-   [TIME] = { .name = "TIME", .title = "  TIME+  ", .description = "Total time the process has spent in user and system time", .flags = 0, },
-   [NLWP] = { .name = "NLWP", .title = "NLWP ", .description = "Number of threads in the process", .flags = 0, },
-   [TGID] = { .name = "TGID", .title = "   TGID ", .description = "Thread group ID (i.e. process ID)", .flags = 0, },
-   [100] = { .name = "*** report bug! ***", .title = NULL, .description = NULL, .flags = 0, },
-};
-
-MeterClass* Platform_meterTypes[] = {
+const MeterClass* const Platform_meterTypes[] = {
    &CPUMeter_class,
    &ClockMeter_class,
+   &DateMeter_class,
+   &DateTimeMeter_class,
    &LoadAverageMeter_class,
    &LoadMeter_class,
    &MemoryMeter_class,
    &SwapMeter_class,
+   &MemorySwapMeter_class,
    &TasksMeter_class,
    &BatteryMeter_class,
    &HostnameMeter_class,
+   &SysArchMeter_class,
    &UptimeMeter_class,
    &AllCPUsMeter_class,
    &AllCPUs2Meter_class,
+   &AllCPUs4Meter_class,
+   &AllCPUs8Meter_class,
    &LeftCPUsMeter_class,
    &RightCPUsMeter_class,
    &LeftCPUs2Meter_class,
    &RightCPUs2Meter_class,
+   &LeftCPUs4Meter_class,
+   &RightCPUs4Meter_class,
+   &LeftCPUs8Meter_class,
+   &RightCPUs8Meter_class,
    &BlankMeter_class,
    NULL
 };
 
-void Platform_setBindings(Htop_Action* keys) {
-   (void) keys;
+static const char Platform_unsupported[] = "unsupported";
+
+void Platform_init(void) {
+   /* no platform-specific setup needed */
 }
 
-int Platform_numberOfFields = 100;
+void Platform_done(void) {
+   /* no platform-specific cleanup needed */
+}
 
-extern char Process_pidFormat[20];
-
-ProcessPidColumn Process_pidColumns[] = {
-   { .id = 0, .label = NULL },
-};
+void Platform_setBindings(Htop_Action* keys) {
+   /* no platform-specific key bindings */
+   (void) keys;
+}
 
 int Platform_getUptime() {
    return 0;
@@ -107,11 +95,14 @@ int Platform_getMaxPid() {
    return 1;
 }
 
-double Platform_setCPUValues(Meter* this, int cpu) {
+double Platform_setCPUValues(Meter* this, unsigned int cpu) {
    (void) cpu;
 
    double* v = this->values;
-   v[CPU_METER_FREQUENCY] = -1;
+   v[CPU_METER_FREQUENCY] = NAN;
+   v[CPU_METER_TEMPERATURE] = NAN;
+
+   this->curItems = 1;
 
    return 0.0;
 }
@@ -124,12 +115,41 @@ void Platform_setSwapValues(Meter* this) {
    (void) this;
 }
 
-bool Process_isThread(Process* this) {
-   (void) this;
-   return false;
-}
-
 char* Platform_getProcessEnv(pid_t pid) {
    (void) pid;
    return NULL;
+}
+
+char* Platform_getInodeFilename(pid_t pid, ino_t inode) {
+   (void)pid;
+   (void)inode;
+   return NULL;
+}
+
+FileLocks_ProcessData* Platform_getProcessLocks(pid_t pid) {
+   (void)pid;
+   return NULL;
+}
+
+bool Platform_getDiskIO(DiskIOData* data) {
+   (void)data;
+   return false;
+}
+
+bool Platform_getNetworkIO(NetworkIOData* data) {
+   (void)data;
+   return false;
+}
+
+void Platform_getBattery(double* percent, ACPresence* isOnAC) {
+   *percent = NAN;
+   *isOnAC = AC_ERROR;
+}
+
+void Platform_getHostname(char* buffer, size_t size) {
+   String_safeStrncpy(buffer, Platform_unsupported, size);
+}
+
+void Platform_getRelease(char** string) {
+   *string = xStrdup(Platform_unsupported);
 }

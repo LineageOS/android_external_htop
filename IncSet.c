@@ -1,51 +1,24 @@
 /*
 htop - IncSet.c
 (C) 2005-2012 Hisham H. Muhammad
-Released under the GNU GPL, see the COPYING file
+Released under the GNU GPLv2+, see the COPYING file
 in the source distribution for its full text.
 */
 
+#include "config.h" // IWYU pragma: keep
+
 #include "IncSet.h"
-#include "StringUtils.h"
-#include "Panel.h"
-#include "ListItem.h"
-#include "CRT.h"
+
+#include <ctype.h>
 #include <string.h>
 #include <stdlib.h>
 
-/*{
+#include "CRT.h"
+#include "ListItem.h"
+#include "Object.h"
+#include "ProvideCurses.h"
+#include "XUtils.h"
 
-#include "FunctionBar.h"
-#include "Panel.h"
-#include <stdbool.h>
-
-#define INCMODE_MAX 40
-
-typedef enum {
-   INC_SEARCH = 0,
-   INC_FILTER = 1
-} IncType;
-
-#define IncSet_filter(inc_) (inc_->filtering ? inc_->modes[INC_FILTER].buffer : NULL)
-
-typedef struct IncMode_ {
-   char buffer[INCMODE_MAX+1];
-   int index;
-   FunctionBar* bar;
-   bool isFilter;
-} IncMode;
-
-typedef struct IncSet_ {
-   IncMode modes[2];
-   IncMode* active;
-   FunctionBar* defaultBar;
-   bool filtering;
-   bool found;
-} IncSet;
-
-typedef const char* (*IncMode_GetPanelValue)(Panel*, int);
-
-}*/
 
 static void IncMode_reset(IncMode* mode) {
    mode->index = 0;
@@ -56,9 +29,16 @@ void IncSet_reset(IncSet* this, IncType type) {
    IncMode_reset(&this->modes[type]);
 }
 
-static const char* const searchFunctions[] = {"Next  ", "Cancel ", " Search: ", NULL};
-static const char* const searchKeys[] = {"F3", "Esc", "  "};
-static int searchEvents[] = {KEY_F(3), 27, ERR};
+void IncSet_setFilter(IncSet* this, const char* filter) {
+   IncMode* mode = &this->modes[INC_FILTER];
+   size_t len = String_safeStrncpy(mode->buffer, filter, sizeof(mode->buffer));
+   mode->index = len;
+   this->filtering = true;
+}
+
+static const char* const searchFunctions[] = {"Next  ", "Prev   ", "Cancel ", " Search: ", NULL};
+static const char* const searchKeys[] = {"F3", "S-F3", "Esc", "  "};
+static const int searchEvents[] = {KEY_F(3), KEY_F(15), 27, ERR};
 
 static inline void IncMode_initSearch(IncMode* search) {
    memset(search, 0, sizeof(IncMode));
@@ -68,7 +48,7 @@ static inline void IncMode_initSearch(IncMode* search) {
 
 static const char* const filterFunctions[] = {"Done  ", "Clear ", " Filter: ", NULL};
 static const char* const filterKeys[] = {"Enter", "Esc", "  "};
-static int filterEvents[] = {13, 27, ERR};
+static const int filterEvents[] = {13, 27, ERR};
 
 static inline void IncMode_initFilter(IncMode* filter) {
    memset(filter, 0, sizeof(IncMode));
@@ -81,12 +61,13 @@ static inline void IncMode_done(IncMode* mode) {
 }
 
 IncSet* IncSet_new(FunctionBar* bar) {
-   IncSet* this = xCalloc(1, sizeof(IncSet));
+   IncSet* this = xMalloc(sizeof(IncSet));
    IncMode_initSearch(&(this->modes[INC_SEARCH]));
    IncMode_initFilter(&(this->modes[INC_FILTER]));
    this->active = NULL;
-   this->filtering = false;
    this->defaultBar = bar;
+   this->filtering = false;
+   this->found = false;
    return this;
 }
 
@@ -96,8 +77,8 @@ void IncSet_delete(IncSet* this) {
    free(this);
 }
 
-static void updateWeakPanel(IncSet* this, Panel* panel, Vector* lines) {
-   Object* selected = Panel_getSelected(panel);
+static void updateWeakPanel(const IncSet* this, Panel* panel, Vector* lines) {
+   const Object* selected = Panel_getSelected(panel);
    Panel_prune(panel);
    if (this->filtering) {
       int n = 0;
@@ -106,7 +87,10 @@ static void updateWeakPanel(IncSet* this, Panel* panel, Vector* lines) {
          ListItem* line = (ListItem*)Vector_get(lines, i);
          if (String_contains_i(line->value, incFilter)) {
             Panel_add(panel, (Object*)line);
-            if (selected == (Object*)line) Panel_setSelected(panel, n);
+            if (selected == (Object*)line) {
+               Panel_setSelected(panel, n);
+            }
+
             n++;
          }
       }
@@ -114,37 +98,41 @@ static void updateWeakPanel(IncSet* this, Panel* panel, Vector* lines) {
       for (int i = 0; i < Vector_size(lines); i++) {
          Object* line = Vector_get(lines, i);
          Panel_add(panel, line);
-         if (selected == line) Panel_setSelected(panel, i);
+         if (selected == line) {
+            Panel_setSelected(panel, i);
+         }
       }
    }
 }
 
-static bool search(IncMode* mode, Panel* panel, IncMode_GetPanelValue getPanelValue) {
+static bool search(const IncMode* mode, Panel* panel, IncMode_GetPanelValue getPanelValue) {
    int size = Panel_size(panel);
-   bool found = false;
    for (int i = 0; i < size; i++) {
       if (String_contains_i(getPanelValue(panel, i), mode->buffer)) {
          Panel_setSelected(panel, i);
-         found = true;
-         break;
+         return true;
       }
    }
-   if (found)
-      FunctionBar_draw(mode->bar, mode->buffer);
-   else
-      FunctionBar_drawAttr(mode->bar, mode->buffer, CRT_colors[FAILED_SEARCH]);
-   return found;
+
+   return false;
 }
 
-static bool IncMode_find(IncMode* mode, Panel* panel, IncMode_GetPanelValue getPanelValue, int step) {
+static bool IncMode_find(const IncMode* mode, Panel* panel, IncMode_GetPanelValue getPanelValue, int step) {
    int size = Panel_size(panel);
    int here = Panel_getSelectedIndex(panel);
    int i = here;
-   for(;;) {
-      i+=step;
-      if (i == size) i = 0;
-      if (i == -1) i = size - 1;
-      if (i == here) return false;
+   for (;;) {
+      i += step;
+      if (i == size) {
+         i = 0;
+      }
+      if (i == -1) {
+         i = size - 1;
+      }
+      if (i == here) {
+         return false;
+      }
+
       if (String_contains_i(getPanelValue(panel, i), mode->buffer)) {
          Panel_setSelected(panel, i);
          return true;
@@ -152,36 +140,33 @@ static bool IncMode_find(IncMode* mode, Panel* panel, IncMode_GetPanelValue getP
    }
 }
 
-bool IncSet_next(IncSet* this, IncType type, Panel* panel, IncMode_GetPanelValue getPanelValue) {
-   return IncMode_find(&this->modes[type], panel, getPanelValue, 1);
-}
-
-bool IncSet_prev(IncSet* this, IncType type, Panel* panel, IncMode_GetPanelValue getPanelValue) {
-   return IncMode_find(&this->modes[type], panel, getPanelValue, -1);
-}
-
 bool IncSet_handleKey(IncSet* this, int ch, Panel* panel, IncMode_GetPanelValue getPanelValue, Vector* lines) {
    if (ch == ERR)
       return true;
+
    IncMode* mode = this->active;
    int size = Panel_size(panel);
    bool filterChanged = false;
    bool doSearch = true;
-   if (ch == KEY_F(3)) {
-      if (size == 0) return true;
-      IncMode_find(mode, panel, getPanelValue, 1);
+   if (ch == KEY_F(3) || ch == KEY_F(15)) {
+      if (size == 0)
+         return true;
+
+      IncMode_find(mode, panel, getPanelValue, ch == KEY_F(3) ? 1 : -1);
       doSearch = false;
-   } else if (ch < 255 && isprint((char)ch)) {
+   } else if (0 < ch && ch < 255 && isprint((unsigned char)ch)) {
       if (mode->index < INCMODE_MAX) {
-         mode->buffer[mode->index] = ch;
+         mode->buffer[mode->index] = (char) ch;
          mode->index++;
          mode->buffer[mode->index] = 0;
          if (mode->isFilter) {
             filterChanged = true;
-            if (mode->index == 1) this->filtering = true;
+            if (mode->index == 1) {
+               this->filtering = true;
+            }
          }
       }
-   } else if ((ch == KEY_BACKSPACE || ch == 127)) {
+   } else if (ch == KEY_BACKSPACE || ch == 127) {
       if (mode->index > 0) {
          mode->index--;
          mode->buffer[mode->index] = 0;
@@ -196,7 +181,7 @@ bool IncSet_handleKey(IncSet* this, int ch, Panel* panel, IncMode_GetPanelValue 
          doSearch = false;
       }
    } else if (ch == KEY_RESIZE) {
-     Panel_resize(panel, COLS, LINES-panel->y-1);
+      doSearch = (mode->index > 0);
    } else {
       if (mode->isFilter) {
          filterChanged = true;
@@ -211,7 +196,6 @@ bool IncSet_handleKey(IncSet* this, int ch, Panel* panel, IncMode_GetPanelValue 
       }
       this->active = NULL;
       Panel_setDefaultBar(panel);
-      FunctionBar_draw(this->defaultBar, NULL);
       doSearch = false;
    }
    if (doSearch) {
@@ -224,23 +208,20 @@ bool IncSet_handleKey(IncSet* this, int ch, Panel* panel, IncMode_GetPanelValue 
 }
 
 const char* IncSet_getListItemValue(Panel* panel, int i) {
-   ListItem* l = (ListItem*) Panel_get(panel, i);
-   if (l)
-      return l->value;
-   return "";
+   const ListItem* l = (const ListItem*) Panel_get(panel, i);
+   return l ? l->value : "";
 }
 
 void IncSet_activate(IncSet* this, IncType type, Panel* panel) {
    this->active = &(this->modes[type]);
-   FunctionBar_draw(this->active->bar, this->active->buffer);
    panel->currentBar = this->active->bar;
 }
 
-void IncSet_drawBar(IncSet* this) {
+void IncSet_drawBar(const IncSet* this) {
    if (this->active) {
-      FunctionBar_draw(this->active->bar, this->active->buffer);
+      FunctionBar_drawExtra(this->active->bar, this->active->buffer, (this->active->isFilter || this->found) ? -1 : CRT_colors[FAILED_SEARCH], true);
    } else {
-      FunctionBar_draw(this->defaultBar, NULL);
+      FunctionBar_draw(this->defaultBar);
    }
 }
 

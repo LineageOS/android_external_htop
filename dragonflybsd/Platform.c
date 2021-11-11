@@ -2,47 +2,38 @@
 htop - dragonflybsd/Platform.c
 (C) 2014 Hisham H. Muhammad
 (C) 2017 Diederik de Groot
-Released under the GNU GPL, see the COPYING file
+Released under the GNU GPLv2+, see the COPYING file
 in the source distribution for its full text.
 */
 
-#include "Platform.h"
-#include "Meter.h"
-#include "CPUMeter.h"
-#include "MemoryMeter.h"
-#include "SwapMeter.h"
-#include "TasksMeter.h"
-#include "LoadAverageMeter.h"
-#include "UptimeMeter.h"
-#include "ClockMeter.h"
-#include "HostnameMeter.h"
-#include "DragonFlyBSDProcess.h"
-#include "DragonFlyBSDProcessList.h"
+#include "dragonflybsd/Platform.h"
 
-#include <sys/types.h>
+#include <math.h>
+#include <time.h>
+#include <sys/resource.h>
 #include <sys/sysctl.h>
 #include <sys/time.h>
-#include <sys/resource.h>
+#include <sys/types.h>
 #include <vm/vm_param.h>
-#include <time.h>
-#include <math.h>
 
-/*{
-#include "Action.h"
-#include "BatteryMeter.h"
-#include "SignalsPanel.h"
+#include "ClockMeter.h"
+#include "CPUMeter.h"
+#include "DateMeter.h"
+#include "DateTimeMeter.h"
+#include "HostnameMeter.h"
+#include "LoadAverageMeter.h"
+#include "MemoryMeter.h"
+#include "MemorySwapMeter.h"
+#include "ProcessList.h"
+#include "SwapMeter.h"
+#include "SysArchMeter.h"
+#include "TasksMeter.h"
+#include "UptimeMeter.h"
+#include "dragonflybsd/DragonFlyBSDProcess.h"
+#include "dragonflybsd/DragonFlyBSDProcessList.h"
 
-extern ProcessFieldData Process_fields[];
 
-}*/
-
-#ifndef CLAMP
-#define CLAMP(x,low,high) (((x)>(high))?(high):(((x)<(low))?(low):(x)))
-#endif
-
-ProcessField Platform_defaultFields[] = { PID, USER, PRIORITY, NICE, M_SIZE, M_RESIDENT, STATE, PERCENT_CPU, PERCENT_MEM, TIME, COMM, 0 };
-
-int Platform_numberOfFields = LAST_PROCESSFIELD;
+const ProcessField Platform_defaultFields[] = { PID, USER, PRIORITY, NICE, M_VIRT, M_RESIDENT, STATE, PERCENT_CPU, PERCENT_MEM, TIME, COMM, 0 };
 
 const SignalItem Platform_signals[] = {
    { .name = " 0 Cancel",    .number =  0 },
@@ -81,32 +72,51 @@ const SignalItem Platform_signals[] = {
    { .name = "33 SIGLIBRT",  .number = 33 },
 };
 
-const unsigned int Platform_numberOfSignals = sizeof(Platform_signals)/sizeof(SignalItem);
+const unsigned int Platform_numberOfSignals = ARRAYSIZE(Platform_signals);
 
-void Platform_setBindings(Htop_Action* keys) {
-   (void) keys;
-}
-
-MeterClass* Platform_meterTypes[] = {
+const MeterClass* const Platform_meterTypes[] = {
    &CPUMeter_class,
    &ClockMeter_class,
+   &DateMeter_class,
+   &DateTimeMeter_class,
    &LoadAverageMeter_class,
    &LoadMeter_class,
    &MemoryMeter_class,
+   &MemorySwapMeter_class,
    &SwapMeter_class,
    &TasksMeter_class,
    &UptimeMeter_class,
    &BatteryMeter_class,
    &HostnameMeter_class,
+   &SysArchMeter_class,
    &AllCPUsMeter_class,
    &AllCPUs2Meter_class,
+   &AllCPUs4Meter_class,
+   &AllCPUs8Meter_class,
    &LeftCPUsMeter_class,
    &RightCPUsMeter_class,
    &LeftCPUs2Meter_class,
    &RightCPUs2Meter_class,
+   &LeftCPUs4Meter_class,
+   &RightCPUs4Meter_class,
+   &LeftCPUs8Meter_class,
+   &RightCPUs8Meter_class,
    &BlankMeter_class,
    NULL
 };
+
+void Platform_init(void) {
+   /* no platform-specific setup needed */
+}
+
+void Platform_done(void) {
+   /* no platform-specific cleanup needed */
+}
+
+void Platform_setBindings(Htop_Action* keys) {
+   /* no platform-specific key bindings */
+   (void) keys;
+}
 
 int Platform_getUptime() {
    struct timeval bootTime, currTime;
@@ -149,16 +159,16 @@ int Platform_getMaxPid() {
    return maxPid;
 }
 
-double Platform_setCPUValues(Meter* this, int cpu) {
-   DragonFlyBSDProcessList* fpl = (DragonFlyBSDProcessList*) this->pl;
-   int cpus = this->pl->cpuCount;
-   CPUData* cpuData;
+double Platform_setCPUValues(Meter* this, unsigned int cpu) {
+   const DragonFlyBSDProcessList* fpl = (const DragonFlyBSDProcessList*) this->pl;
+   unsigned int cpus = this->pl->activeCPUs;
+   const CPUData* cpuData;
 
    if (cpus == 1) {
-     // single CPU box has everything in fpl->cpus[0]
-     cpuData = &(fpl->cpus[0]);
+      // single CPU box has everything in fpl->cpus[0]
+      cpuData = &(fpl->cpus[0]);
    } else {
-     cpuData = &(fpl->cpus[cpu]);
+      cpuData = &(fpl->cpus[cpu]);
    }
 
    double  percent;
@@ -169,45 +179,82 @@ double Platform_setCPUValues(Meter* this, int cpu) {
    if (this->pl->settings->detailedCPUTime) {
       v[CPU_METER_KERNEL]  = cpuData->systemPercent;
       v[CPU_METER_IRQ]     = cpuData->irqPercent;
-      Meter_setItems(this, 4);
-      percent = v[0]+v[1]+v[2]+v[3];
+      this->curItems = 4;
+      percent = v[0] + v[1] + v[2] + v[3];
    } else {
       v[2] = cpuData->systemAllPercent;
-      Meter_setItems(this, 3);
-      percent = v[0]+v[1]+v[2];
+      this->curItems = 3;
+      percent = v[0] + v[1] + v[2];
    }
 
-   percent = CLAMP(percent, 0.0, 100.0);
-   if (isnan(percent)) percent = 0.0;
+   percent = isnan(percent) ? 0.0 : CLAMP(percent, 0.0, 100.0);
 
-   v[CPU_METER_FREQUENCY] = -1;
+   v[CPU_METER_FREQUENCY] = NAN;
+   v[CPU_METER_TEMPERATURE] = NAN;
 
    return percent;
 }
 
 void Platform_setMemoryValues(Meter* this) {
    // TODO
-   ProcessList* pl = (ProcessList*) this->pl;
+   const ProcessList* pl = this->pl;
 
    this->total = pl->totalMem;
    this->values[0] = pl->usedMem;
    this->values[1] = pl->buffersMem;
-   this->values[2] = pl->cachedMem;
+   // this->values[2] = "shared memory, like tmpfs and shm"
+   this->values[3] = pl->cachedMem;
+   // this->values[4] = "available memory"
 }
 
 void Platform_setSwapValues(Meter* this) {
-   ProcessList* pl = (ProcessList*) this->pl;
+   const ProcessList* pl = this->pl;
    this->total = pl->totalSwap;
    this->values[0] = pl->usedSwap;
-}
-
-void Platform_setTasksValues(Meter* this) {
-   // TODO
-   (void)this;	// prevent unused warning
+   this->values[1] = NAN;
 }
 
 char* Platform_getProcessEnv(pid_t pid) {
    // TODO
-   (void)pid;	// prevent unused warning
+   (void)pid;  // prevent unused warning
    return NULL;
+}
+
+char* Platform_getInodeFilename(pid_t pid, ino_t inode) {
+   (void)pid;
+   (void)inode;
+   return NULL;
+}
+
+FileLocks_ProcessData* Platform_getProcessLocks(pid_t pid) {
+   (void)pid;
+   return NULL;
+}
+
+bool Platform_getDiskIO(DiskIOData* data) {
+   // TODO
+   (void)data;
+   return false;
+}
+
+bool Platform_getNetworkIO(NetworkIOData* data) {
+   // TODO
+   (void)data;
+   return false;
+}
+
+void Platform_getBattery(double* percent, ACPresence* isOnAC) {
+   int life;
+   size_t life_len = sizeof(life);
+   if (sysctlbyname("hw.acpi.battery.life", &life, &life_len, NULL, 0) == -1)
+      *percent = NAN;
+   else
+      *percent = life;
+
+   int acline;
+   size_t acline_len = sizeof(acline);
+   if (sysctlbyname("hw.acpi.acline", &acline, &acline_len, NULL, 0) == -1)
+      *isOnAC = AC_ERROR;
+   else
+      *isOnAC = acline == 0 ? AC_ABSENT : AC_PRESENT;
 }

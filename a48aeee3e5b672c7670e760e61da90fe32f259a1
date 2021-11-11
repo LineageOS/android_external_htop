@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "f99cbaf4_f4f39f83",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 16185
+      },
+      "writtenOn": "2021-11-11T16:58:47Z",
+      "side": 1,
+      "message": "so, when this is ready in your eyes DroidFreak, leave a CR+1 \u0026 V+1 on all commits on this chain except the DNM, on the DNM only leave a V+1, as we will push the merge instead.",
+      "revId": "a48aeee3e5b672c7670e760e61da90fe32f259a1",
+      "serverId": "1ec6b3db-b2c1-4fa4-84a2-4c7efe89ba71"
+    }
+  ]
+}

@@ -1,58 +1,41 @@
-#include "EnvScreen.h"
+#include "config.h" // IWYU pragma: keep
 
-#include "config.h"
-#include "CRT.h"
-#include "IncSet.h"
-#include "ListItem.h"
-#include "Platform.h"
-#include "StringUtils.h"
+#include "EnvScreen.h"
 
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
 
-/*{
-#include "InfoScreen.h"
+#include "Macros.h"
+#include "Panel.h"
+#include "Platform.h"
+#include "ProvideCurses.h"
+#include "Vector.h"
+#include "XUtils.h"
 
-typedef struct EnvScreen_ {
-   InfoScreen super;
-} EnvScreen;
-}*/
-
-InfoScreenClass EnvScreen_class = {
-   .super = {
-      .extends = Class(Object),
-      .delete = EnvScreen_delete
-   },
-   .scan = EnvScreen_scan,
-   .draw = EnvScreen_draw
-};
 
 EnvScreen* EnvScreen_new(Process* process) {
    EnvScreen* this = xMalloc(sizeof(EnvScreen));
    Object_setClass(this, Class(EnvScreen));
-   return (EnvScreen*) InfoScreen_init(&this->super, process, NULL, LINES-3, " ");
+   return (EnvScreen*) InfoScreen_init(&this->super, process, NULL, LINES - 2, " ");
 }
 
 void EnvScreen_delete(Object* this) {
    free(InfoScreen_done((InfoScreen*)this));
 }
 
-void EnvScreen_draw(InfoScreen* this) {
-   InfoScreen_drawTitled(this, "Environment of process %d - %s", this->process->pid, this->process->comm);
+static void EnvScreen_draw(InfoScreen* this) {
+   InfoScreen_drawTitled(this, "Environment of process %d - %s", this->process->pid, Process_getCommand(this->process));
 }
 
-void EnvScreen_scan(InfoScreen* this) {
+static void EnvScreen_scan(InfoScreen* this) {
    Panel* panel = this->display;
-   int idx = MAX(Panel_getSelectedIndex(panel), 0);
+   int idx = MAXIMUM(Panel_getSelectedIndex(panel), 0);
 
    Panel_prune(panel);
 
-   CRT_dropPrivileges();
    char* env = Platform_getProcessEnv(this->process->pid);
-   CRT_restorePrivileges();
    if (env) {
-      for (char *p = env; *p; p = strrchr(p, 0)+1)
+      for (const char* p = env; *p; p = strrchr(p, 0) + 1)
          InfoScreen_addLine(this, p);
       free(env);
    }
@@ -64,3 +47,12 @@ void EnvScreen_scan(InfoScreen* this) {
    Vector_insertionSort(panel->items);
    Panel_setSelected(panel, idx);
 }
+
+const InfoScreenClass EnvScreen_class = {
+   .super = {
+      .extends = Class(Object),
+      .delete = EnvScreen_delete
+   },
+   .scan = EnvScreen_scan,
+   .draw = EnvScreen_draw
+};

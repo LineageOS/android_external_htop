@@ -1,38 +1,33 @@
 /*
 htop - CategoriesPanel.c
 (C) 2004-2011 Hisham H. Muhammad
-Released under the GNU GPL, see the COPYING file
+Released under the GNU GPLv2+, see the COPYING file
 in the source distribution for its full text.
 */
 
 #include "CategoriesPanel.h"
 
-#include "AvailableMetersPanel.h"
-#include "MetersPanel.h"
-#include "DisplayOptionsPanel.h"
-#include "ColumnsPanel.h"
-#include "ColorsPanel.h"
-#include "AvailableColumnsPanel.h"
-
-#include <assert.h>
+#include <ctype.h>
+#include <stdbool.h>
 #include <stdlib.h>
 
-/*{
-#include "Panel.h"
-#include "Settings.h"
-#include "ScreenManager.h"
-#include "ProcessList.h"
+#include "AvailableColumnsPanel.h"
+#include "AvailableMetersPanel.h"
+#include "ColorsPanel.h"
+#include "ColumnsPanel.h"
+#include "DisplayOptionsPanel.h"
+#include "FunctionBar.h"
+#include "Header.h"
+#include "HeaderLayout.h"
+#include "HeaderOptionsPanel.h"
+#include "ListItem.h"
+#include "Macros.h"
+#include "MetersPanel.h"
+#include "Object.h"
+#include "ProvideCurses.h"
+#include "Vector.h"
+#include "XUtils.h"
 
-typedef struct CategoriesPanel_ {
-   Panel super;
-   ScreenManager* scr;
-
-   Settings* settings;
-   Header* header;
-   ProcessList* pl;
-} CategoriesPanel;
-
-}*/
 
 static const char* const CategoriesFunctions[] = {"      ", "      ", "      ", "      ", "      ", "      ", "      ", "      ", "      ", "Done  ", NULL};
 
@@ -43,14 +38,24 @@ static void CategoriesPanel_delete(Object* object) {
    free(this);
 }
 
-void CategoriesPanel_makeMetersPage(CategoriesPanel* this) {
-   MetersPanel* leftMeters = MetersPanel_new(this->settings, "Left column", this->header->columns[0], this->scr);
-   MetersPanel* rightMeters = MetersPanel_new(this->settings, "Right column", this->header->columns[1], this->scr);
-   leftMeters->rightNeighbor = rightMeters;
-   rightMeters->leftNeighbor = leftMeters;
-   Panel* availableMeters = (Panel*) AvailableMetersPanel_new(this->settings, this->header, (Panel*) leftMeters, (Panel*) rightMeters, this->scr, this->pl);
-   ScreenManager_add(this->scr, (Panel*) leftMeters, 20);
-   ScreenManager_add(this->scr, (Panel*) rightMeters, 20);
+static void CategoriesPanel_makeMetersPage(CategoriesPanel* this) {
+   size_t columns = HeaderLayout_getColumns(this->scr->header->headerLayout);
+   MetersPanel** meterPanels = xMallocArray(columns, sizeof(MetersPanel*));
+
+   for (size_t i = 0; i < columns; i++) {
+      char titleBuffer[32];
+      xSnprintf(titleBuffer, sizeof(titleBuffer), "Column %zu", i + 1);
+      meterPanels[i] = MetersPanel_new(this->settings, titleBuffer, this->header->columns[i], this->scr);
+
+      if (i != 0) {
+         meterPanels[i]->leftNeighbor = meterPanels[i - 1];
+         meterPanels[i - 1]->rightNeighbor = meterPanels[i];
+      }
+
+      ScreenManager_add(this->scr, (Panel*) meterPanels[i], 20);
+   }
+
+   Panel* availableMeters = (Panel*) AvailableMetersPanel_new(this->settings, this->header, columns, meterPanels, this->scr, this->pl);
    ScreenManager_add(this->scr, availableMeters, -1);
 }
 
@@ -60,16 +65,35 @@ static void CategoriesPanel_makeDisplayOptionsPage(CategoriesPanel* this) {
 }
 
 static void CategoriesPanel_makeColorsPage(CategoriesPanel* this) {
-   Panel* colors = (Panel*) ColorsPanel_new(this->settings, this->scr);
+   Panel* colors = (Panel*) ColorsPanel_new(this->settings);
    ScreenManager_add(this->scr, colors, -1);
 }
 
 static void CategoriesPanel_makeColumnsPage(CategoriesPanel* this) {
    Panel* columns = (Panel*) ColumnsPanel_new(this->settings);
-   Panel* availableColumns = (Panel*) AvailableColumnsPanel_new(columns);
+   Panel* availableColumns = (Panel*) AvailableColumnsPanel_new(columns, this->settings->dynamicColumns);
    ScreenManager_add(this->scr, columns, 20);
    ScreenManager_add(this->scr, availableColumns, -1);
 }
+
+static void CategoriesPanel_makeHeaderOptionsPage(CategoriesPanel* this) {
+   Panel* colors = (Panel*) HeaderOptionsPanel_new(this->settings, this->scr);
+   ScreenManager_add(this->scr, colors, -1);
+}
+
+typedef void (* CategoriesPanel_makePageFunc)(CategoriesPanel* ref);
+typedef struct CategoriesPanelPage_ {
+   const char* name;
+   CategoriesPanel_makePageFunc ctor;
+} CategoriesPanelPage;
+
+static const CategoriesPanelPage categoriesPanelPages[] = {
+   { .name = "Display options", .ctor = CategoriesPanel_makeDisplayOptionsPage },
+   { .name = "Header layout", .ctor = CategoriesPanel_makeHeaderOptionsPage },
+   { .name = "Meters", .ctor = CategoriesPanel_makeMetersPage },
+   { .name = "Columns", .ctor = CategoriesPanel_makeColumnsPage },
+   { .name = "Colors", .ctor = CategoriesPanel_makeColorsPage },
+};
 
 static HandlerResult CategoriesPanel_eventHandler(Panel* super, int ch) {
    CategoriesPanel* this = (CategoriesPanel*) super;
@@ -97,7 +121,7 @@ static HandlerResult CategoriesPanel_eventHandler(Panel* super, int ch) {
          break;
       }
       default:
-         if (ch < 255 && isalpha(ch))
+         if (0 < ch && ch < 255 && isgraph((unsigned char)ch))
             result = Panel_selectByTyping(super, ch);
          if (result == BREAK_LOOP)
             result = IGNORED;
@@ -107,25 +131,15 @@ static HandlerResult CategoriesPanel_eventHandler(Panel* super, int ch) {
       int size = ScreenManager_size(this->scr);
       for (int i = 1; i < size; i++)
          ScreenManager_remove(this->scr, 1);
-      switch (selected) {
-         case 0:
-            CategoriesPanel_makeMetersPage(this);
-            break;
-         case 1:
-            CategoriesPanel_makeDisplayOptionsPage(this);
-            break;
-         case 2:
-            CategoriesPanel_makeColorsPage(this);
-            break;
-         case 3:
-            CategoriesPanel_makeColumnsPage(this);
-            break;
+
+      if (selected >= 0 && (size_t)selected < ARRAYSIZE(categoriesPanelPages)) {
+         categoriesPanelPages[selected].ctor(this);
       }
    }
    return result;
 }
 
-PanelClass CategoriesPanel_class = {
+const PanelClass CategoriesPanel_class = {
    .super = {
       .extends = Class(Panel),
       .delete = CategoriesPanel_delete
@@ -144,9 +158,10 @@ CategoriesPanel* CategoriesPanel_new(ScreenManager* scr, Settings* settings, Hea
    this->header = header;
    this->pl = pl;
    Panel_setHeader(super, "Setup");
-   Panel_add(super, (Object*) ListItem_new("Meters", 0));
-   Panel_add(super, (Object*) ListItem_new("Display options", 0));
-   Panel_add(super, (Object*) ListItem_new("Colors", 0));
-   Panel_add(super, (Object*) ListItem_new("Columns", 0));
+   for (size_t i = 0; i < ARRAYSIZE(categoriesPanelPages); i++)
+      Panel_add(super, (Object*) ListItem_new(categoriesPanelPages[i].name, 0));
+
+   ScreenManager_add(scr, super, 16);
+   categoriesPanelPages[0].ctor(this);
    return this;
 }

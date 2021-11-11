@@ -1,235 +1,446 @@
-
-ACLOCAL_AMFLAGS = -I m4
-AUTOMAKE_OPTIONS = subdir-objects
-
+if !HTOP_PCP
 bin_PROGRAMS = htop
+myhtopplatprogram = htop.c
+else
+bin_PROGRAMS = pcp-htop
+myhtopplatprogram = pcp-htop.c
+endif
 
 dist_man_MANS = htop.1
-EXTRA_DIST = $(dist_man_MANS) htop.desktop htop.png scripts/MakeHeader.py \
-install-sh autogen.sh missing
+EXTRA_DIST = \
+	$(dist_man_MANS) \
+	autogen.sh \
+	htop.desktop \
+	htop.png \
+	htop.svg \
+	build-aux/compile \
+	build-aux/depcomp \
+	build-aux/install-sh \
+	build-aux/missing
 applicationsdir = $(datadir)/applications
 applications_DATA = htop.desktop
 pixmapdir = $(datadir)/pixmaps
 pixmap_DATA = htop.png
+appicondir = $(datadir)/icons/hicolor/scalable/apps
+appicon_DATA = htop.svg
 
-AM_CFLAGS += -pedantic -Wall $(wextra_flag) -std=c99 -D_XOPEN_SOURCE_EXTENDED -DSYSCONFDIR=\"$(sysconfdir)\" -I"$(top_srcdir)/$(my_htop_platform)"
+AM_CFLAGS += -pedantic -std=c99 -D_XOPEN_SOURCE_EXTENDED -DSYSCONFDIR="\"$(sysconfdir)\"" -I"$(top_srcdir)/$(my_htop_platform)"
 AM_LDFLAGS =
-AM_CPPFLAGS = -DNDEBUG
 
-myhtopsources = AvailableMetersPanel.c CategoriesPanel.c CheckItem.c \
-ClockMeter.c ColorsPanel.c ColumnsPanel.c CPUMeter.c CRT.c MainPanel.c \
-DisplayOptionsPanel.c FunctionBar.c Hashtable.c Header.c htop.c ListItem.c \
-LoadAverageMeter.c MemoryMeter.c Meter.c MetersPanel.c Object.c Panel.c \
-BatteryMeter.c Process.c ProcessList.c RichString.c ScreenManager.c Settings.c \
-SignalsPanel.c StringUtils.c SwapMeter.c TasksMeter.c UptimeMeter.c \
-TraceScreen.c UsersTable.c Vector.c AvailableColumnsPanel.c AffinityPanel.c \
-HostnameMeter.c OpenFilesScreen.c Affinity.c IncSet.c Action.c EnvScreen.c \
-InfoScreen.c XAlloc.c
+myhtopsources = \
+	Action.c \
+	Affinity.c \
+	AffinityPanel.c \
+	AvailableColumnsPanel.c \
+	AvailableMetersPanel.c \
+	BatteryMeter.c \
+	CategoriesPanel.c \
+	ClockMeter.c \
+	ColorsPanel.c \
+	ColumnsPanel.c \
+	CommandLine.c \
+	CommandScreen.c \
+	Compat.c \
+	CPUMeter.c \
+	CRT.c \
+	DateMeter.c \
+	DateTimeMeter.c \
+	DiskIOMeter.c \
+	DisplayOptionsPanel.c \
+	DynamicColumn.c \
+	DynamicMeter.c \
+	EnvScreen.c \
+	FunctionBar.c \
+	Hashtable.c \
+	Header.c \
+	HeaderOptionsPanel.c \
+	HostnameMeter.c \
+	IncSet.c \
+	InfoScreen.c \
+	ListItem.c \
+	LoadAverageMeter.c \
+	MainPanel.c \
+	MemoryMeter.c \
+	MemorySwapMeter.c \
+	Meter.c \
+	MetersPanel.c \
+	NetworkIOMeter.c \
+	Object.c \
+	OpenFilesScreen.c \
+	OptionItem.c \
+	Panel.c \
+	Process.c \
+	ProcessList.c \
+	ProcessLocksScreen.c \
+	RichString.c \
+	ScreenManager.c \
+	Settings.c \
+	SignalsPanel.c \
+	SwapMeter.c \
+	SysArchMeter.c \
+	TasksMeter.c \
+	TraceScreen.c \
+	UptimeMeter.c \
+	UsersTable.c \
+	Vector.c \
+	XUtils.c
 
-myhtopheaders = AvailableColumnsPanel.h AvailableMetersPanel.h \
-CategoriesPanel.h CheckItem.h ClockMeter.h ColorsPanel.h ColumnsPanel.h \
-CPUMeter.h CRT.h MainPanel.h DisplayOptionsPanel.h FunctionBar.h \
-Hashtable.h Header.h htop.h ListItem.h LoadAverageMeter.h MemoryMeter.h \
-BatteryMeter.h Meter.h MetersPanel.h Object.h Panel.h ProcessList.h RichString.h \
-ScreenManager.h Settings.h SignalsPanel.h StringUtils.h SwapMeter.h \
-TasksMeter.h UptimeMeter.h TraceScreen.h UsersTable.h Vector.h Process.h \
-AffinityPanel.h HostnameMeter.h OpenFilesScreen.h Affinity.h IncSet.h Action.h \
-EnvScreen.h InfoScreen.h XAlloc.h
-
-all_platform_headers =
+myhtopheaders = \
+	Action.h \
+	Affinity.h \
+	AffinityPanel.h \
+	AvailableColumnsPanel.h \
+	AvailableMetersPanel.h \
+	BatteryMeter.h \
+	CPUMeter.h \
+	CRT.h \
+	CategoriesPanel.h \
+	ClockMeter.h \
+	ColorsPanel.h \
+	ColumnsPanel.h \
+	CommandLine.h \
+	CommandScreen.h \
+	Compat.h \
+	DateMeter.h \
+	DateTimeMeter.h \
+	DiskIOMeter.h \
+	DisplayOptionsPanel.h \
+	DynamicColumn.h \
+	DynamicMeter.h \
+	EnvScreen.h \
+	FunctionBar.h \
+	Hashtable.h \
+	Header.h \
+	HeaderLayout.h \
+	HeaderOptionsPanel.h \
+	HostnameMeter.h \
+	IncSet.h \
+	InfoScreen.h \
+	ListItem.h \
+	LoadAverageMeter.h \
+	Macros.h \
+	MainPanel.h \
+	MemoryMeter.h \
+	MemorySwapMeter.h \
+	Meter.h \
+	MetersPanel.h \
+	NetworkIOMeter.h \
+	Object.h \
+	OpenFilesScreen.h \
+	OptionItem.h \
+	Panel.h \
+	Process.h \
+	ProcessList.h \
+	ProcessLocksScreen.h \
+	ProvideCurses.h \
+	RichString.h \
+	ScreenManager.h \
+	Settings.h \
+	SignalsPanel.h \
+	SwapMeter.h \
+	SysArchMeter.h \
+	TasksMeter.h \
+	TraceScreen.h \
+	UptimeMeter.h \
+	UsersTable.h \
+	Vector.h \
+	XUtils.h
 
 # Linux
 # -----
 
 linux_platform_headers = \
-	linux/Platform.h \
-	linux/IOPriorityPanel.h \
+	generic/gettime.h \
+	generic/hostname.h \
+	generic/uname.h \
+	linux/HugePageMeter.h \
 	linux/IOPriority.h \
+	linux/IOPriorityPanel.h \
+	linux/LibSensors.h \
 	linux/LinuxProcess.h \
 	linux/LinuxProcessList.h \
-	linux/LinuxCRT.h \
-	linux/Battery.h \
+	linux/Platform.h \
 	linux/PressureStallMeter.h \
+	linux/ProcessField.h \
+	linux/SELinuxMeter.h \
+	linux/SystemdMeter.h \
+	linux/ZramMeter.h \
+	linux/ZramStats.h \
 	zfs/ZfsArcMeter.h \
-	zfs/ZfsCompressedArcMeter.h \
-	zfs/ZfsArcStats.h
+	zfs/ZfsArcStats.h \
+	zfs/ZfsCompressedArcMeter.h
 
-all_platform_headers += $(linux_platform_headers)
+linux_platform_sources = \
+	generic/gettime.c \
+	generic/hostname.c \
+	generic/uname.c \
+	linux/HugePageMeter.c \
+	linux/IOPriorityPanel.c \
+	linux/LibSensors.c \
+	linux/LinuxProcess.c \
+	linux/LinuxProcessList.c \
+	linux/Platform.c \
+	linux/PressureStallMeter.c \
+	linux/SELinuxMeter.c \
+	linux/SystemdMeter.c \
+	linux/ZramMeter.c \
+	zfs/ZfsArcMeter.c \
+	zfs/ZfsCompressedArcMeter.c
 
 if HTOP_LINUX
 AM_LDFLAGS += -rdynamic
-myhtopplatsources = linux/Platform.c linux/IOPriorityPanel.c linux/IOPriority.c \
-linux/LinuxProcess.c linux/LinuxProcessList.c linux/LinuxCRT.c linux/Battery.c \
-linux/PressureStallMeter.c \
-zfs/ZfsArcMeter.c zfs/ZfsCompressedArcMeter.c zfs/ZfsArcStats.c
-
 myhtopplatheaders = $(linux_platform_headers)
+myhtopplatsources = $(linux_platform_sources)
 endif
 
 # FreeBSD
 # -------
 
 freebsd_platform_headers = \
-	freebsd/Platform.h \
 	freebsd/FreeBSDProcessList.h \
 	freebsd/FreeBSDProcess.h \
-	freebsd/FreeBSDCRT.h \
-	freebsd/Battery.h \
+	freebsd/Platform.h \
+	freebsd/ProcessField.h \
+	generic/gettime.h \
+	generic/hostname.h \
+	generic/openzfs_sysctl.h \
+	generic/uname.h \
 	zfs/ZfsArcMeter.h \
-	zfs/ZfsCompressedArcMeter.h \
 	zfs/ZfsArcStats.h \
-	zfs/openzfs_sysctl.h
+	zfs/ZfsCompressedArcMeter.h
 
-all_platform_headers += $(freebsd_platform_headers)
+freebsd_platform_sources = \
+	freebsd/Platform.c \
+	freebsd/FreeBSDProcessList.c \
+	freebsd/FreeBSDProcess.c \
+	generic/gettime.c \
+	generic/hostname.c \
+	generic/openzfs_sysctl.c \
+	generic/uname.c \
+	zfs/ZfsArcMeter.c \
+	zfs/ZfsCompressedArcMeter.c
 
 if HTOP_FREEBSD
-myhtopplatsources = freebsd/Platform.c freebsd/FreeBSDProcessList.c \
-freebsd/FreeBSDProcess.c freebsd/FreeBSDCRT.c freebsd/Battery.c \
-zfs/ZfsArcMeter.c zfs/ZfsCompressedArcMeter.c zfs/ZfsArcStats.c zfs/openzfs_sysctl.c
-
 myhtopplatheaders = $(freebsd_platform_headers)
+myhtopplatsources = $(freebsd_platform_sources)
 endif
 
 # DragonFlyBSD
 # ------------
 
 dragonflybsd_platform_headers = \
-	dragonflybsd/Platform.h \
 	dragonflybsd/DragonFlyBSDProcessList.h \
 	dragonflybsd/DragonFlyBSDProcess.h \
-	dragonflybsd/DragonFlyBSDCRT.h \
-	dragonflybsd/Battery.h
+	dragonflybsd/Platform.h \
+	dragonflybsd/ProcessField.h \
+	generic/gettime.h \
+	generic/hostname.h \
+	generic/uname.h
 
-all_platform_headers += $(dragonflybsd_platform_headers)
+dragonflybsd_platform_sources = \
+	dragonflybsd/DragonFlyBSDProcessList.c \
+	dragonflybsd/DragonFlyBSDProcess.c \
+	dragonflybsd/Platform.c \
+	generic/gettime.c \
+	generic/hostname.c \
+	generic/uname.c
 
 if HTOP_DRAGONFLYBSD
-AM_LDFLAGS += -lkvm -lkinfo -lexecinfo
-myhtopplatsources = dragonflybsd/Platform.c dragonflybsd/DragonFlyBSDProcessList.c \
-dragonflybsd/DragonFlyBSDProcess.c dragonflybsd/DragonFlyBSDCRT.c dragonflybsd/Battery.c
-
 myhtopplatheaders = $(dragonflybsd_platform_headers)
+myhtopplatsources = $(dragonflybsd_platform_sources)
+endif
+
+# NetBSD
+# -------
+
+netbsd_platform_headers = \
+	generic/gettime.h \
+	generic/hostname.h \
+	generic/uname.h \
+	netbsd/Platform.h \
+	netbsd/ProcessField.h \
+	netbsd/NetBSDProcess.h \
+	netbsd/NetBSDProcessList.h
+
+netbsd_platform_sources = \
+	generic/gettime.c \
+	generic/hostname.c \
+	generic/uname.c \
+	netbsd/Platform.c \
+	netbsd/NetBSDProcess.c \
+	netbsd/NetBSDProcessList.c
+
+if HTOP_NETBSD
+myhtopplatheaders = $(netbsd_platform_headers)
+myhtopplatsources = $(netbsd_platform_sources)
 endif
 
 # OpenBSD
 # -------
 
 openbsd_platform_headers = \
-	openbsd/Platform.h \
+	generic/gettime.h \
+	generic/hostname.h \
+	generic/uname.h \
 	openbsd/OpenBSDProcessList.h \
 	openbsd/OpenBSDProcess.h \
-	openbsd/OpenBSDCRT.h \
-	openbsd/Battery.h
+	openbsd/Platform.h \
+	openbsd/ProcessField.h
 
-all_platform_headers += $(openbsd_platform_headers)
+openbsd_platform_sources = \
+	generic/gettime.c \
+	generic/hostname.c \
+	generic/uname.c \
+	openbsd/OpenBSDProcessList.c \
+	openbsd/OpenBSDProcess.c \
+	openbsd/Platform.c
 
 if HTOP_OPENBSD
-myhtopplatsources = openbsd/Platform.c openbsd/OpenBSDProcessList.c \
-openbsd/OpenBSDProcess.c openbsd/OpenBSDCRT.c openbsd/Battery.c
-
 myhtopplatheaders = $(openbsd_platform_headers)
+myhtopplatsources = $(openbsd_platform_sources)
 endif
 
 # Darwin
 # ------
 
 darwin_platform_headers = \
-	darwin/Platform.h \
 	darwin/DarwinProcess.h \
 	darwin/DarwinProcessList.h \
-	darwin/DarwinCRT.h \
-	darwin/Battery.h \
+	darwin/Platform.h \
+	darwin/PlatformHelpers.h \
+	darwin/ProcessField.h \
+	generic/gettime.h \
+	generic/hostname.h \
+	generic/openzfs_sysctl.h \
+	generic/uname.h \
 	zfs/ZfsArcMeter.h \
-	zfs/ZfsCompressedArcMeter.h \
 	zfs/ZfsArcStats.h \
-	zfs/openzfs_sysctl.h
+	zfs/ZfsCompressedArcMeter.h
 
-all_platform_headers += $(darwin_platform_headers)
+darwin_platform_sources = \
+	darwin/Platform.c \
+	darwin/PlatformHelpers.c \
+	darwin/DarwinProcess.c \
+	darwin/DarwinProcessList.c \
+	generic/gettime.c \
+	generic/hostname.c \
+	generic/openzfs_sysctl.c \
+	generic/uname.c \
+	zfs/ZfsArcMeter.c \
+	zfs/ZfsCompressedArcMeter.c
 
 if HTOP_DARWIN
 AM_LDFLAGS += -framework IOKit -framework CoreFoundation
-myhtopplatsources = darwin/Platform.c darwin/DarwinProcess.c \
-darwin/DarwinProcessList.c darwin/DarwinCRT.c darwin/Battery.c \
-zfs/ZfsArcMeter.c zfs/ZfsCompressedArcMeter.c zfs/ZfsArcStats.c zfs/openzfs_sysctl.c
-
 myhtopplatheaders = $(darwin_platform_headers)
+myhtopplatsources = $(darwin_platform_sources)
 endif
 
 # Solaris
 # -------
 
 solaris_platform_headers = \
+	generic/gettime.h \
+	generic/hostname.h \
+	generic/uname.h \
+	solaris/ProcessField.h \
 	solaris/Platform.h \
 	solaris/SolarisProcess.h \
 	solaris/SolarisProcessList.h \
-	solaris/SolarisCRT.h \
-	solaris/Battery.h \
 	zfs/ZfsArcMeter.h \
-	zfs/ZfsCompressedArcMeter.h \
-	zfs/ZfsArcStats.h
+	zfs/ZfsArcStats.h \
+	zfs/ZfsCompressedArcMeter.h
 
-all_platform_headers += $(solaris_platform_headers)
+solaris_platform_sources = \
+	generic/gettime.c \
+	generic/hostname.c \
+	generic/uname.c \
+	solaris/Platform.c \
+	solaris/SolarisProcess.c \
+	solaris/SolarisProcessList.c \
+	zfs/ZfsArcMeter.c \
+	zfs/ZfsCompressedArcMeter.c
 
 if HTOP_SOLARIS
-myhtopplatsources = solaris/Platform.c \
-solaris/SolarisProcess.c solaris/SolarisProcessList.c \
-solaris/SolarisCRT.c solaris/Battery.c \
-zfs/ZfsArcMeter.c zfs/ZfsCompressedArcMeter.c zfs/ZfsArcStats.c
-
 myhtopplatheaders = $(solaris_platform_headers)
+myhtopplatsources = $(solaris_platform_sources)
+endif
+
+# Performance Co-Pilot (PCP)
+# --------------------------
+
+pcp_platform_headers = \
+	linux/PressureStallMeter.h \
+	linux/ZramMeter.h \
+	linux/ZramStats.h \
+	pcp/PCPDynamicColumn.h \
+	pcp/PCPDynamicMeter.h \
+	pcp/PCPMetric.h \
+	pcp/PCPProcess.h \
+	pcp/PCPProcessList.h \
+	pcp/Platform.h \
+	pcp/ProcessField.h \
+	zfs/ZfsArcMeter.h \
+	zfs/ZfsArcStats.h \
+	zfs/ZfsCompressedArcMeter.h
+
+pcp_platform_sources = \
+	linux/PressureStallMeter.c \
+	linux/ZramMeter.c \
+	pcp/PCPDynamicColumn.c \
+	pcp/PCPDynamicMeter.c \
+	pcp/PCPMetric.c \
+	pcp/PCPProcess.c \
+	pcp/PCPProcessList.c \
+	pcp/Platform.c \
+	zfs/ZfsArcMeter.c \
+	zfs/ZfsCompressedArcMeter.c
+
+if HTOP_PCP
+myhtopplatheaders = $(pcp_platform_headers)
+myhtopplatsources = $(pcp_platform_sources)
+pcp_htop_SOURCES  = $(myhtopplatprogram) $(myhtopheaders) $(myhtopplatheaders) $(myhtopsources) $(myhtopplatsources)
 endif
 
 # Unsupported
 # -----------
 
 unsupported_platform_headers = \
+	generic/gettime.h \
 	unsupported/Platform.h \
+	unsupported/ProcessField.h \
 	unsupported/UnsupportedProcess.h \
-	unsupported/UnsupportedProcessList.h \
-	unsupported/UnsupportedCRT.h \
-	unsupported/Battery.h
+	unsupported/UnsupportedProcessList.h
 
-all_platform_headers += $(unsupported_platform_headers)
+unsupported_platform_sources = \
+	generic/gettime.c \
+	unsupported/Platform.c \
+	unsupported/UnsupportedProcess.c \
+	unsupported/UnsupportedProcessList.c
 
 if HTOP_UNSUPPORTED
-myhtopplatsources = unsupported/Platform.c \
-unsupported/UnsupportedProcess.c unsupported/UnsupportedProcessList.c \
-unsupported/UnsupportedCRT.c unsupported/Battery.c
-
+myhtopplatsources = $(unsupported_platform_sources)
 myhtopplatheaders = $(unsupported_platform_headers)
 endif
 
 # ----
 
-SUFFIXES = .h
-
-BUILT_SOURCES = $(myhtopheaders) $(myhtopplatheaders)
-htop_SOURCES  = $(myhtopheaders) $(myhtopplatheaders) $(myhtopsources) $(myhtopplatsources)
+htop_SOURCES = $(myhtopplatprogram) $(myhtopheaders) $(myhtopplatheaders) $(myhtopsources) $(myhtopplatsources)
 nodist_htop_SOURCES = config.h
-
-.PHONY: htop-headers clean-htop-headers
-
-htop-headers: $(myhtopheaders) $(all_platform_headers)
-
-clean-htop-headers:
-	-rm -f $(myhtopheaders) $(all_platform_headers)
 
 target:
 	echo $(htop_SOURCES)
 
 profile:
-	$(MAKE) all CFLAGS="-pg" AM_CPPFLAGS="-pg -O2 -DNDEBUG"
+	$(MAKE) all AM_CPPFLAGS="-pg -O2 -DNDEBUG"
 
 debug:
-	$(MAKE) all CFLAGS="" AM_CPPFLAGS="-ggdb -DDEBUG"
+	$(MAKE) all AM_CPPFLAGS="-ggdb3 -Og" CFLAGS="`printf ' %s ' "$(CFLAGS)"|sed -E 's#[[:space:]]-O[^[:space:]]+[[:space:]]# #g'` -ggdb3 -Og"
 
 coverage:
-	$(MAKE) all CFLAGS="" AM_CPPFLAGS="-fprofile-arcs -ftest-coverage -DDEBUG" LDFLAGS="-lgcov"
-
-.c.h:
-	./scripts/MakeHeader.py $<
+	$(MAKE) all AM_CPPFLAGS="-fprofile-arcs -ftest-coverage" AM_LDFLAGS="-lgcov"
 
 cppcheck:
-	cppcheck -q -v . --enable=all -DHAVE_CGROUP -DHAVE_OPENVZ -DHAVE_TASKSTATS
+	cppcheck -q -v . --enable=all -DHAVE_OPENVZ
 
 dist-hook: $(top_distdir)/configure
 	@if grep 'pkg_m4_absent' '$(top_distdir)/configure'; then \

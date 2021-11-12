@@ -33,6 +33,24 @@
       "message": "Thanks Nolan.\nLooks OK to me, able to see the required columns.\nCPU meters can be configured to use less space\nIORate columns work if opened as root\nSELinux attributes column seems to work as well. May it be helpful.\n\nHere is a screenshot of htop as root while opening spotify:\nhttps://ibb.co/MPNFSV4\n\nhtoprc used: https://pastebin.com/4KCmgntd",
       "revId": "a48aeee3e5b672c7670e760e61da90fe32f259a1",
       "serverId": "1ec6b3db-b2c1-4fa4-84a2-4c7efe89ba71"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "5cf68536_df65721f",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 17945
+      },
+      "writtenOn": "2021-11-12T06:30:36Z",
+      "side": 1,
+      "message": "Nolen** Sorry :P",
+      "parentUuid": "16623426_011e3ea0",
+      "revId": "a48aeee3e5b672c7670e760e61da90fe32f259a1",
+      "serverId": "1ec6b3db-b2c1-4fa4-84a2-4c7efe89ba71"
     }
   ]
 }

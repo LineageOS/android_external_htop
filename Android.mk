@@ -3,7 +3,7 @@ LOCAL_PATH := $(call my-dir)
 include $(CLEAR_VARS)
 
 LOCAL_CFLAGS := \
-    -pedantic -Wall -Wextra -std=c99 -DSYSCONFDIR=\"/product/etc\"
+    -pedantic -Wall -Wextra -std=c99 -DSYSCONFDIR=\"/system_ext/etc\"
 
 LOCAL_CFLAGS += \
     -Wno-gnu-include-next -Wno-enum-conversion -Wno-deprecated-declarations
@@ -94,6 +94,6 @@ LOCAL_MODULE_TAGS := optional
 
 LOCAL_MODULE := htop
 
-LOCAL_PRODUCT_MODULE := true
+LOCAL_SYSTEM_EXT_MODULE := true
 
 include $(BUILD_EXECUTABLE)

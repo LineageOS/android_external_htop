@@ -74,6 +74,7 @@ myhtopsources = \
 	ProcessLocksScreen.c \
 	RichString.c \
 	ScreenManager.c \
+	ScreensPanel.c \
 	Settings.c \
 	SignalsPanel.c \
 	SwapMeter.c \
@@ -135,6 +136,7 @@ myhtopheaders = \
 	ProvideCurses.h \
 	RichString.h \
 	ScreenManager.h \
+	ScreensPanel.h \
 	Settings.h \
 	SignalsPanel.h \
 	SwapMeter.h \
@@ -153,6 +155,7 @@ linux_platform_headers = \
 	generic/gettime.h \
 	generic/hostname.h \
 	generic/uname.h \
+	linux/CGroupUtils.h \
 	linux/HugePageMeter.h \
 	linux/IOPriority.h \
 	linux/IOPriorityPanel.h \
@@ -174,6 +177,7 @@ linux_platform_sources = \
 	generic/gettime.c \
 	generic/hostname.c \
 	generic/uname.c \
+	linux/CGroupUtils.c \
 	linux/HugePageMeter.c \
 	linux/IOPriorityPanel.c \
 	linux/LibSensors.c \

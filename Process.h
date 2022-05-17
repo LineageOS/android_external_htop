@@ -60,6 +60,26 @@ typedef enum ProcessField_ {
    LAST_PROCESSFIELD
 } ProcessField;
 
+/* Core process states (shared by platforms)
+ * NOTE: The enum has an ordering that is important!
+ * See processStateChar in process.c for ProcessSate -> letter mapping */
+typedef enum ProcessState_ {
+   UNKNOWN = 1,
+   RUNNABLE,
+   RUNNING,
+   QUEUED,
+   WAITING,
+   UNINTERRUPTIBLE_WAIT,
+   BLOCKED,
+   PAGING,
+   STOPPED,
+   TRACED,
+   ZOMBIE,
+   DEFUNCT,
+   IDLE,
+   SLEEPING
+} ProcessState;
+
 struct Settings_;
 
 /* Holds information about regions of the cmdline that should be
@@ -202,20 +222,8 @@ typedef struct Process_ {
    /* Number of major faults the process has made which have required loading a memory page from disk */
    unsigned long int majflt;
 
-   /*
-    * Process state (platform dependent):
-    *   D  -  Waiting
-    *   I  -  Idle
-    *   L  -  Acquiring lock
-    *   R  -  Running
-    *   S  -  Sleeping
-    *   T  -  Stopped (on a signal)
-    *   X  -  Dead
-    *   Z  -  Zombie
-    *   t  -  Tracing stop
-    *   ?  -  Unknown
-    */
-   char state;
+   /* Process state enum field (platform dependent) */
+   ProcessState state;
 
    /* Whether the process was updated during the current scan */
    bool updated;
@@ -242,10 +250,10 @@ typedef struct Process_ {
     * Internal state for tree-mode.
     */
    int indent;
-   unsigned int tree_left;
-   unsigned int tree_right;
    unsigned int tree_depth;
-   unsigned int tree_index;
+
+   /* Has no known parent process */
+   bool isRoot;
 
    /*
     * Internal state for merged Command display
@@ -271,6 +279,9 @@ typedef struct ProcessFieldData_ {
 
    /* Whether the column should be sorted in descending order by default */
    bool defaultSortDesc;
+
+   /* Whether the column width is dynamically adjusted (the minimum width is determined by the title length) */
+   bool autoWidth;
 } ProcessFieldData;
 
 // Implemented in platform-specific code:
@@ -278,24 +289,26 @@ void Process_writeField(const Process* this, RichString* str, ProcessField field
 int Process_compare(const void* v1, const void* v2);
 void Process_delete(Object* cast);
 extern const ProcessFieldData Process_fields[LAST_PROCESSFIELD];
+extern uint8_t Process_fieldWidths[LAST_PROCESSFIELD];
+#define PROCESS_MIN_PID_DIGITS 5
 #define PROCESS_MAX_PID_DIGITS 19
+#define PROCESS_MIN_UID_DIGITS 5
+#define PROCESS_MAX_UID_DIGITS 19
 extern int Process_pidDigits;
+extern int Process_uidDigits;
 
 typedef Process* (*Process_New)(const struct Settings_*);
 typedef void (*Process_WriteField)(const Process*, RichString*, ProcessField);
 typedef int (*Process_CompareByKey)(const Process*, const Process*, ProcessField);
-typedef const char* (*Process_GetCommandStr)(const Process*);
 
 typedef struct ProcessClass_ {
    const ObjectClass super;
    const Process_WriteField writeField;
    const Process_CompareByKey compareByKey;
-   const Process_GetCommandStr getCommandStr;
 } ProcessClass;
 
 #define As_Process(this_)                              ((const ProcessClass*)((this_)->super.klass))
 
-#define Process_getCommand(this_)                      (As_Process(this_)->getCommandStr ? As_Process(this_)->getCommandStr((const Process*)(this_)) : Process_getCommandStr((const Process*)(this_)))
 #define Process_compareByKey(p1_, p2_, key_)           (As_Process(p1_)->compareByKey ? (As_Process(p1_)->compareByKey(p1_, p2_, key_)) : Process_compareByKey_Base(p1_, p2_, key_))
 
 static inline pid_t Process_getParentPid(const Process* this) {
@@ -337,6 +350,9 @@ static inline bool Process_isThread(const Process* this) {
 
 void Process_setupColumnWidths(void);
 
+/* Sets the size of the UID column based on the passed UID */
+void Process_setUidColumnWidth(uid_t maxUid);
+
 /* Takes number in bytes (base 1024). Prints 6 columns. */
 void Process_printBytes(RichString* str, unsigned long long number, bool coloring);
 
@@ -356,7 +372,7 @@ void Process_fillStarttimeBuffer(Process* this);
 
 void Process_printLeftAlignedField(RichString* str, int attr, const char* content, unsigned int width);
 
-void Process_printPercentage(float val, char* buffer, int n, int* attr);
+void Process_printPercentage(float val, char* buffer, int n, uint8_t width, int* attr);
 
 void Process_display(const Object* cast, RichString* out);
 
@@ -382,17 +398,20 @@ int Process_pidCompare(const void* v1, const void* v2);
 
 int Process_compareByKey_Base(const Process* p1, const Process* p2, ProcessField key);
 
-// Avoid direct calls, use Process_getCommand instead
-const char* Process_getCommandStr(const Process* this);
+const char* Process_getCommand(const Process* this);
 
 void Process_updateComm(Process* this, const char* comm);
 void Process_updateCmdline(Process* this, const char* cmdline, int basenameStart, int basenameEnd);
 void Process_updateExe(Process* this, const char* exe);
 
 /* This function constructs the string that is displayed by
- * Process_writeCommand and also returned by Process_getCommandStr */
+ * Process_writeCommand and also returned by Process_getCommand */
 void Process_makeCommandStr(Process* this);
 
 void Process_writeCommand(const Process* this, int attr, int baseAttr, RichString* str);
+
+void Process_resetFieldWidths(void);
+void Process_updateFieldWidth(ProcessField key, size_t width);
+void Process_updateCPUFieldWidths(float percentage);
 
 #endif

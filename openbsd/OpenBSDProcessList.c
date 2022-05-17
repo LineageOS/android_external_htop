@@ -309,7 +309,7 @@ static void OpenBSDProcessList_scanProcs(OpenBSDProcessList* this) {
 
          OpenBSDProcessList_updateProcessName(this->kd, kproc, proc);
 
-         if (settings->flags & PROCESS_FLAG_CWD) {
+         if (settings->ss->flags & PROCESS_FLAG_CWD) {
             OpenBSDProcessList_updateCwd(kproc, proc);
          }
 
@@ -330,8 +330,11 @@ static void OpenBSDProcessList_scanProcs(OpenBSDProcessList* this) {
       fp->addr = kproc->p_addr;
       proc->m_virt = kproc->p_vm_dsize * pageSizeKB;
       proc->m_resident = kproc->p_vm_rssize * pageSizeKB;
+
       proc->percent_mem = proc->m_resident / (float)this->super.totalMem * 100.0F;
       proc->percent_cpu = CLAMP(getpcpu(kproc), 0.0F, this->super.activeCPUs * 100.0F);
+      Process_updateCPUFieldWidths(proc->percent_cpu);
+
       proc->nice = kproc->p_nice - 20;
       proc->time = 100 * (kproc->p_rtime_sec + ((kproc->p_rtime_usec + 500000) / 1000000));
       proc->priority = kproc->p_priority - PZERO;
@@ -345,15 +348,16 @@ static void OpenBSDProcessList_scanProcs(OpenBSDProcessList* this) {
          proc->user = UsersTable_getRef(this->super.usersTable, proc->st_uid);
       }
 
+      /* Taken from: https://github.com/openbsd/src/blob/6a38af0976a6870911f4b2de19d8da28723a5778/sys/sys/proc.h#L420 */
       switch (kproc->p_stat) {
-         case SIDL:    proc->state = 'I'; break;
-         case SRUN:    proc->state = 'P'; break;
-         case SSLEEP:  proc->state = 'S'; break;
-         case SSTOP:   proc->state = 'T'; break;
-         case SZOMB:   proc->state = 'Z'; break;
-         case SDEAD:   proc->state = 'D'; break;
-         case SONPROC: proc->state = 'R'; break;
-         default:      proc->state = '?';
+         case SIDL:    proc->state = IDLE; break;
+         case SRUN:    proc->state = RUNNABLE; break;
+         case SSLEEP:  proc->state = SLEEPING; break;
+         case SSTOP:   proc->state = STOPPED; break;
+         case SZOMB:   proc->state = ZOMBIE; break;
+         case SDEAD:   proc->state = DEFUNCT; break;
+         case SONPROC: proc->state = RUNNING; break;
+         default:      proc->state = UNKNOWN;
       }
 
       if (Process_isKernelThread(proc)) {
@@ -363,7 +367,7 @@ static void OpenBSDProcessList_scanProcs(OpenBSDProcessList* this) {
       }
 
       this->super.totalTasks++;
-      if (proc->state == 'R') {
+      if (proc->state == RUNNING) {
          this->super.runningTasks++;
       }
 
@@ -388,7 +392,7 @@ static void kernelCPUTimesToHtop(const u_int64_t* times, CPUData* cpu) {
 
    unsigned long long sysAllTime = times[CP_INTR] + times[CP_SYS];
 
-   // XXX Not sure if CP_SPIN should be added to sysAllTime.
+   // XXX Not sure if CP_SPIN should be added to sysAllTime.
    // See https://github.com/openbsd/src/commit/531d8034253fb82282f0f353c086e9ad827e031c
    #ifdef CP_SPIN
    sysAllTime += times[CP_SPIN];

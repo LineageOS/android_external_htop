@@ -51,13 +51,13 @@ void ProcessList_goThroughEntries(ProcessList* super, bool pauseProcessUpdate) {
    Process_updateCmdline(proc, "<unsupported architecture>", 0, 0);
    Process_updateExe(proc, "/path/to/executable");
 
-   if (proc->settings->flags & PROCESS_FLAG_CWD) {
+   if (proc->settings->ss->flags & PROCESS_FLAG_CWD) {
       free_and_xStrdup(&proc->procCwd, "/current/working/directory");
    }
 
    proc->updated = true;
 
-   proc->state = 'R';
+   proc->state = RUNNING;
    proc->isKernelThread = false;
    proc->isUserlandThread = false;
    proc->show = true; /* Reflected in proc->settings-> "hideXXX" really */
@@ -70,6 +70,7 @@ void ProcessList_goThroughEntries(ProcessList* super, bool pauseProcessUpdate) {
 
    proc->percent_cpu = 2.5;
    proc->percent_mem = 2.5;
+   Process_updateCPUFieldWidths(proc->percent_cpu);
 
    proc->st_uid = 0;
    proc->user = "nobody"; /* Update whenever proc->st_uid is changed */

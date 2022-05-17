@@ -62,6 +62,7 @@ LOCAL_SRC_FILES := \
     ProcessLocksScreen.c \
     RichString.c \
     ScreenManager.c \
+    ScreensPanel.c \
     Settings.c \
     SignalsPanel.c \
     SwapMeter.c \
@@ -75,6 +76,7 @@ LOCAL_SRC_FILES := \
     generic/gettime.c \
     generic/hostname.c \
     generic/uname.c \
+    linux/CGroupUtils.c \
     linux/HugePageMeter.c \
     linux/IOPriorityPanel.c \
     linux/LibSensors.c \

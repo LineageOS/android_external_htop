@@ -34,6 +34,24 @@
       "parentUuid": "1d604bfc_c49e0c34",
       "revId": "ef0af86c5636db0167b63fa35b443eb046dcaef7",
       "serverId": "1ec6b3db-b2c1-4fa4-84a2-4c7efe89ba71"
+    },
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "773980e3_a461f180",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 2
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 16185
+      },
+      "writtenOn": "2022-05-25T20:30:26Z",
+      "side": 1,
+      "message": "Update: I\u0027ve been told it\u0027s not \"policy\" but \"just something we\u0027ve historically done\"\n\nBut, authorship noted - I will ensure it\u0027s correct next time.",
+      "parentUuid": "10f94103_3fb32059",
+      "revId": "ef0af86c5636db0167b63fa35b443eb046dcaef7",
+      "serverId": "1ec6b3db-b2c1-4fa4-84a2-4c7efe89ba71"
     }
   ]
 }

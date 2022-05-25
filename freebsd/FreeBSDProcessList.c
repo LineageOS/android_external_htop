@@ -109,8 +109,8 @@ ProcessList* ProcessList_new(UsersTable* usersTable, Hashtable* dynamicMeters, H
 
    size_t sizeof_cp_time_array = sizeof(unsigned long) * CPUSTATES;
    len = 2; sysctlnametomib("kern.cp_time", MIB_kern_cp_time, &len);
-   fpl->cp_time_o = xCalloc(cpus, sizeof_cp_time_array);
-   fpl->cp_time_n = xCalloc(cpus, sizeof_cp_time_array);
+   fpl->cp_time_o = xCalloc(CPUSTATES, sizeof(unsigned long));
+   fpl->cp_time_n = xCalloc(CPUSTATES, sizeof(unsigned long));
    len = sizeof_cp_time_array;
 
    // fetch initial single (or average) CPU clicks from kernel
@@ -509,6 +509,9 @@ void ProcessList_goThroughEntries(ProcessList* super, bool pauseProcessUpdate) {
          proc->pgrp = kproc->ki_pgid;
          proc->st_uid = kproc->ki_uid;
          proc->starttime_ctime = kproc->ki_start.tv_sec;
+         if (proc->starttime_ctime < 0) {
+            proc->starttime_ctime = super->realtimeMs / 1000;
+         }
          Process_fillStarttimeBuffer(proc);
          proc->user = UsersTable_getRef(super->usersTable, proc->st_uid);
          ProcessList_add(super, proc);
@@ -516,7 +519,7 @@ void ProcessList_goThroughEntries(ProcessList* super, bool pauseProcessUpdate) {
          FreeBSDProcessList_updateExe(kproc, proc);
          FreeBSDProcessList_updateProcessName(fpl->kd, kproc, proc);
 
-         if (settings->flags & PROCESS_FLAG_CWD) {
+         if (settings->ss->flags & PROCESS_FLAG_CWD) {
             FreeBSDProcessList_updateCwd(kproc, proc);
          }
 
@@ -549,6 +552,8 @@ void ProcessList_goThroughEntries(ProcessList* super, bool pauseProcessUpdate) {
          }
       }
 
+      free_and_xStrdup(&fp->emul, kproc->ki_emul);
+
       // from FreeBSD source /src/usr.bin/top/machine.c
       proc->m_virt = kproc->ki_size / ONE_K;
       proc->m_resident = kproc->ki_rssize * pageSizeKb;
@@ -557,6 +562,7 @@ void ProcessList_goThroughEntries(ProcessList* super, bool pauseProcessUpdate) {
 
       proc->percent_cpu = 100.0 * ((double)kproc->ki_pctcpu / (double)kernelFScale);
       proc->percent_mem = 100.0 * proc->m_resident / (double)(super->totalMem);
+      Process_updateCPUFieldWidths(proc->percent_cpu);
 
       if (kproc->ki_stat == SRUN && kproc->ki_oncpu != NOCPU) {
          proc->processor = kproc->ki_oncpu;
@@ -578,15 +584,16 @@ void ProcessList_goThroughEntries(ProcessList* super, bool pauseProcessUpdate) {
          proc->nice = PRIO_MAX + 1 + kproc->ki_pri.pri_level - PRI_MIN_IDLE;
       }
 
+      /* Taken from: https://github.com/freebsd/freebsd-src/blob/1ad2d87778970582854082bcedd2df0394fd4933/sys/sys/proc.h#L851 */
       switch (kproc->ki_stat) {
-      case SIDL:   proc->state = 'I'; break;
-      case SRUN:   proc->state = 'R'; break;
-      case SSLEEP: proc->state = 'S'; break;
-      case SSTOP:  proc->state = 'T'; break;
-      case SZOMB:  proc->state = 'Z'; break;
-      case SWAIT:  proc->state = 'D'; break;
-      case SLOCK:  proc->state = 'L'; break;
-      default:     proc->state = '?';
+      case SIDL:   proc->state = IDLE; break;
+      case SRUN:   proc->state = RUNNING; break;
+      case SSLEEP: proc->state = SLEEPING; break;
+      case SSTOP:  proc->state = STOPPED; break;
+      case SZOMB:  proc->state = ZOMBIE; break;
+      case SWAIT:  proc->state = WAITING; break;
+      case SLOCK:  proc->state = BLOCKED; break;
+      default:     proc->state = UNKNOWN;
       }
 
       if (Process_isKernelThread(proc))
@@ -595,7 +602,7 @@ void ProcessList_goThroughEntries(ProcessList* super, bool pauseProcessUpdate) {
       proc->show = ! ((hideKernelThreads && Process_isKernelThread(proc)) || (hideUserlandThreads && Process_isUserlandThread(proc)));
 
       super->totalTasks++;
-      if (proc->state == 'R')
+      if (proc->state == RUNNING)
          super->runningTasks++;
       proc->updated = true;
    }

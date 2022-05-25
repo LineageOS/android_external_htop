@@ -363,6 +363,19 @@ static void SolarisProcessList_updateCwd(pid_t pid, Process* proc) {
    free_and_xStrdup(&proc->procCwd, target);
 }
 
+/* Taken from: https://docs.oracle.com/cd/E19253-01/817-6223/6mlkidlom/index.html#tbl-sched-state */
+static inline ProcessState SolarisProcessList_getProcessState(char state) {
+   switch (state) {
+      case 'S': return SLEEPING;
+      case 'R': return RUNNABLE;
+      case 'O': return RUNNING;
+      case 'Z': return ZOMBIE;
+      case 'T': return STOPPED;
+      case 'I': return IDLE;
+      default: return UNKNOWN;
+   }
+}
+
 /* NOTE: the following is a callback function of type proc_walk_f
  *       and MUST conform to the appropriate definition in order
  *       to work.  See libproc(3LIB) on a Solaris or Illumos
@@ -402,7 +415,7 @@ static int SolarisProcessList_walkproc(psinfo_t* _psinfo, lwpsinfo_t* _lwpsinfo,
    proc->priority           = _lwpsinfo->pr_pri;
    proc->nice               = _lwpsinfo->pr_nice - NZERO;
    proc->processor          = _lwpsinfo->pr_onpro;
-   proc->state              = _lwpsinfo->pr_sname;
+   proc->state              = SolarisProcessList_getProcessState(_lwpsinfo->pr_sname);
    // NOTE: This 'percentage' is a 16-bit BINARY FRACTIONS where 1.0 = 0x8000
    // Source: https://docs.oracle.com/cd/E19253-01/816-5174/proc-4/index.html
    // (accessed on 18 November 2017)
@@ -438,7 +451,7 @@ static int SolarisProcessList_walkproc(psinfo_t* _psinfo, lwpsinfo_t* _lwpsinfo,
       Process_updateComm(proc, _psinfo->pr_fname);
       Process_updateCmdline(proc, _psinfo->pr_psargs, 0, 0);
 
-      if (proc->settings->flags & PROCESS_FLAG_CWD) {
+      if (proc->settings->ss->flags & PROCESS_FLAG_CWD) {
          SolarisProcessList_updateCwd(_psinfo->pr_pid, proc);
       }
    }
@@ -450,8 +463,11 @@ static int SolarisProcessList_walkproc(psinfo_t* _psinfo, lwpsinfo_t* _lwpsinfo,
       proc->tgid            = (_psinfo->pr_ppid * 1024);
       sproc->realppid       = _psinfo->pr_ppid;
       sproc->realtgid       = _psinfo->pr_ppid;
+
       // See note above (in common section) about this BINARY FRACTION
       proc->percent_cpu     = ((uint16_t)_psinfo->pr_pctcpu / (double)32768) * (double)100.0;
+      Process_updateCPUFieldWidths(proc->percent_cpu);
+
       proc->time            = _psinfo->pr_time.tv_sec;
       if (!preExisting) { // Tasks done only for NEW processes
          proc->isUserlandThread = false;
@@ -462,11 +478,11 @@ static int SolarisProcessList_walkproc(psinfo_t* _psinfo, lwpsinfo_t* _lwpsinfo,
       if (proc->isKernelThread && !pl->settings->hideKernelThreads) {
          pl->kernelThreads += proc->nlwp;
          pl->totalTasks += proc->nlwp + 1;
-         if (proc->state == 'O') {
+         if (proc->state == RUNNING) {
             pl->runningTasks++;
          }
       } else if (!proc->isKernelThread) {
-         if (proc->state == 'O') {
+         if (proc->state == RUNNING) {
             pl->runningTasks++;
          }
          if (pl->settings->hideUserlandThreads) {
@@ -479,6 +495,8 @@ static int SolarisProcessList_walkproc(psinfo_t* _psinfo, lwpsinfo_t* _lwpsinfo,
       proc->show = !(pl->settings->hideKernelThreads && proc->isKernelThread);
    } else { // We are not in the master LWP, so jump to the LWP handling code
       proc->percent_cpu        = ((uint16_t)_lwpsinfo->pr_pctcpu / (double)32768) * (double)100.0;
+      Process_updateCPUFieldWidths(proc->percent_cpu);
+
       proc->time               = _lwpsinfo->pr_time.tv_sec;
       if (!preExisting) { // Tasks done only for NEW LWPs
          proc->isUserlandThread    = true;

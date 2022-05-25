@@ -34,6 +34,7 @@ in the source distribution for its full text.
 #include "ProcessLocksScreen.h"
 #include "RichString.h"
 #include "SignalsPanel.h"
+#include "CommandLine.h"
 
 #include "pcp/PCPDynamicColumn.h"
 #include "pcp/PCPDynamicMeter.h"
@@ -57,9 +58,9 @@ typedef struct Platform_ {
    unsigned int ncpu;         /* maximum processor count configured */
 } Platform;
 
-extern ProcessField Platform_defaultFields[];
+extern const ScreenDefaults Platform_defaultScreens[];
 
-extern int Platform_numberOfFields;
+extern const unsigned int Platform_numberOfDefaultScreens;
 
 extern const SignalItem Platform_signals[];
 
@@ -67,7 +68,7 @@ extern const unsigned int Platform_numberOfSignals;
 
 extern const MeterClass* const Platform_meterTypes[];
 
-void Platform_init(void);
+bool Platform_init(void);
 
 void Platform_done(void);
 
@@ -126,7 +127,7 @@ enum {
 
 void Platform_longOptionsUsage(const char* name);
 
-bool Platform_getLongOption(int opt, int argc, char** argv);
+CommandLineStatus Platform_getLongOption(int opt, int argc, char** argv);
 
 extern pmOptions opts;
 

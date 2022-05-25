@@ -307,7 +307,7 @@ static void NetBSDProcessList_scanProcs(NetBSDProcessList* this) {
          }
       }
 
-      if (settings->flags & PROCESS_FLAG_CWD) {
+      if (settings->ss->flags & PROCESS_FLAG_CWD) {
          NetBSDProcessList_updateCwd(kproc, proc);
       }
 
@@ -318,8 +318,11 @@ static void NetBSDProcessList_scanProcs(NetBSDProcessList* this) {
 
       proc->m_virt = kproc->p_vm_vsize;
       proc->m_resident = kproc->p_vm_rssize;
+
       proc->percent_mem = (proc->m_resident * pageSizeKB) / (double)(this->super.totalMem) * 100.0;
       proc->percent_cpu = CLAMP(getpcpu(kproc), 0.0, this->super.activeCPUs * 100.0);
+      Process_updateCPUFieldWidths(proc->percent_cpu);
+
       proc->nlwp = kproc->p_nlwps;
       proc->nice = kproc->p_nice - 20;
       proc->time = 100 * (kproc->p_rtime_sec + ((kproc->p_rtime_usec + 500000) / 1000000));
@@ -331,31 +334,33 @@ static void NetBSDProcessList_scanProcs(NetBSDProcessList* this) {
       int nlwps = 0;
       const struct kinfo_lwp* klwps = kvm_getlwps(this->kd, kproc->p_pid, kproc->p_paddr, sizeof(struct kinfo_lwp), &nlwps);
 
+      /* TODO: According to the link below, SDYING should be a regarded state */
+      /* Taken from: https://ftp.netbsd.org/pub/NetBSD/NetBSD-current/src/sys/sys/proc.h */
       switch (kproc->p_realstat) {
-      case SIDL:     proc->state = 'I'; break;
+      case SIDL:     proc->state = IDLE; break;
       case SACTIVE:
          // We only consider the first LWP with a one of the below states.
          for (int j = 0; j < nlwps; j++) {
             if (klwps) {
                switch (klwps[j].l_stat) {
-               case LSONPROC: proc->state = 'P'; break;
-               case LSRUN:    proc->state = 'R'; break;
-               case LSSLEEP:  proc->state = 'S'; break;
-               case LSSTOP:   proc->state = 'T'; break;
-               default:       proc->state = '?';
+               case LSONPROC: proc->state = RUNNING; break;
+               case LSRUN:    proc->state = RUNNABLE; break;
+               case LSSLEEP:  proc->state = SLEEPING; break;
+               case LSSTOP:   proc->state = STOPPED; break;
+               default:       proc->state = UNKNOWN;
                }
-               if (proc->state != '?')
+               if (proc->state != UNKNOWN)
                   break;
             } else {
-               proc->state = '?';
+               proc->state = UNKNOWN;
                break;
             }
          }
          break;
-      case SSTOP:    proc->state = 'T'; break;
-      case SZOMB:    proc->state = 'Z'; break;
-      case SDEAD:    proc->state = 'D'; break;
-      default:       proc->state = '?';
+      case SSTOP:    proc->state = STOPPED; break;
+      case SZOMB:    proc->state = ZOMBIE; break;
+      case SDEAD:    proc->state = DEFUNCT; break;
+      default:       proc->state = UNKNOWN;
       }
 
       if (Process_isKernelThread(proc)) {
@@ -365,8 +370,7 @@ static void NetBSDProcessList_scanProcs(NetBSDProcessList* this) {
       }
 
       this->super.totalTasks++;
-      // SRUN ('R') means runnable, not running
-      if (proc->state == 'P') {
+      if (proc->state == RUNNING) {
          this->super.runningTasks++;
       }
       proc->updated = true;

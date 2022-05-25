@@ -97,9 +97,10 @@ DisplayOptionsPanel* DisplayOptionsPanel_new(Settings* settings, ScreenManager* 
    this->scr = scr;
 
    Panel_setHeader(super, "Display options");
-   Panel_add(super, (Object*) CheckItem_newByRef("Tree view", &(settings->treeView)));
-   Panel_add(super, (Object*) CheckItem_newByRef("- Tree view is always sorted by PID (htop 2 behavior)", &(settings->treeViewAlwaysByPID)));
-   Panel_add(super, (Object*) CheckItem_newByRef("- Tree view is collapsed by default", &(settings->allBranchesCollapsed)));
+   Panel_add(super, (Object*) CheckItem_newByRef("Tree view (for the current Screen tab)", &(settings->ss->treeView)));
+   Panel_add(super, (Object*) CheckItem_newByRef("- Tree view is always sorted by PID (htop 2 behavior)", &(settings->ss->treeViewAlwaysByPID)));
+   Panel_add(super, (Object*) CheckItem_newByRef("- Tree view is collapsed by default", &(settings->ss->allBranchesCollapsed)));
+   Panel_add(super, (Object*) CheckItem_newByRef("Show tabs for screens", &(settings->screenTabs)));
    Panel_add(super, (Object*) CheckItem_newByRef("Shadow other users' processes", &(settings->shadowOtherUsers)));
    Panel_add(super, (Object*) CheckItem_newByRef("Hide kernel threads", &(settings->hideKernelThreads)));
    Panel_add(super, (Object*) CheckItem_newByRef("Hide userland process threads", &(settings->hideUserlandThreads)));
@@ -107,7 +108,7 @@ DisplayOptionsPanel* DisplayOptionsPanel_new(Settings* settings, ScreenManager* 
    Panel_add(super, (Object*) CheckItem_newByRef("Show custom thread names", &(settings->showThreadNames)));
    Panel_add(super, (Object*) CheckItem_newByRef("Show program path", &(settings->showProgramPath)));
    Panel_add(super, (Object*) CheckItem_newByRef("Highlight program \"basename\"", &(settings->highlightBaseName)));
-   Panel_add(super, (Object*) CheckItem_newByRef("Highlight out-dated/removed programs", &(settings->highlightDeletedExe)));
+   Panel_add(super, (Object*) CheckItem_newByRef("Highlight out-dated/removed programs (red) / libraries (yellow)", &(settings->highlightDeletedExe)));
    Panel_add(super, (Object*) CheckItem_newByRef("Merge exe, comm and cmdline in Command", &(settings->showMergedCommand)));
    Panel_add(super, (Object*) CheckItem_newByRef("- Try to find comm in cmdline (when Command is merged)", &(settings->findCommInCmdline)));
    Panel_add(super, (Object*) CheckItem_newByRef("- Try to strip exe from cmdline (when Command is merged)", &(settings->stripExeFromCmdline)));

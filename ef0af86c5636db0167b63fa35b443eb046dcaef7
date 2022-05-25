@@ -16,6 +16,24 @@
       "message": "Seems like I have been deauthored from my work :/",
       "revId": "ef0af86c5636db0167b63fa35b443eb046dcaef7",
       "serverId": "1ec6b3db-b2c1-4fa4-84a2-4c7efe89ba71"
+    },
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "10f94103_3fb32059",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 2
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 16185
+      },
+      "writtenOn": "2022-05-25T20:23:11Z",
+      "side": 1,
+      "message": "Hey!\n\nSorry about that - there were 0 merge conflicts, and we don\u0027t (by policy) push merges by people external to the organization.\n\nSo, we usually go through and re-do all upstream merges - which is what happened here.\n\nNext time, I\u0027ll go back and re-edit the merge to maintain original author - just seemed on a 0 conflict merge, not needed.\n\nYour authorship was maintained on the commit above this, though!\n\nThanks for your contribution.",
+      "parentUuid": "1d604bfc_c49e0c34",
+      "revId": "ef0af86c5636db0167b63fa35b443eb046dcaef7",
+      "serverId": "1ec6b3db-b2c1-4fa4-84a2-4c7efe89ba71"
     }
   ]
 }

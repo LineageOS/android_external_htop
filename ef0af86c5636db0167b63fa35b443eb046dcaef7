@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "1d604bfc_c49e0c34",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 2
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 28935
+      },
+      "writtenOn": "2022-05-25T20:08:13Z",
+      "side": 1,
+      "message": "Seems like I have been deauthored from my work :/",
+      "revId": "ef0af86c5636db0167b63fa35b443eb046dcaef7",
+      "serverId": "1ec6b3db-b2c1-4fa4-84a2-4c7efe89ba71"
+    }
+  ]
+}

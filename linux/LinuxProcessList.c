@@ -961,13 +961,13 @@ static void LinuxProcessList_readCGroupFile(LinuxProcess* process, openat_arg_t 
 
       char* group = buffer;
       for (size_t i = 0; i < 2; i++) {
-         group = strchrnul(group, ':');
+         group = String_strchrnul(group, ':');
          if (!*group)
             break;
          group++;
       }
 
-      char* eol = strchrnul(group, '\n');
+      char* eol = String_strchrnul(group, '\n');
       *eol = '\0';
 
       if (at != output) {

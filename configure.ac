@@ -260,6 +260,7 @@ AC_CHECK_FUNCS([ \
     memfd_create\
     openat \
     readlinkat \
+    strchrnul \
    ])
 
 if test "$my_htop_platform" = darwin; then

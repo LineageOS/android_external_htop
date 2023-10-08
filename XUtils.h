@@ -56,6 +56,17 @@ void String_freeArray(char** s);
 
 char* String_readLine(FILE* fd) ATTR_MALLOC;
 
+static inline char* String_strchrnul(const char* s, int c) {
+#ifdef HAVE_STRCHRNUL
+   return strchrnul(s, c);
+#else
+   char* result = strchr(s, c);
+   if (result)
+      return result;
+   return strchr(s, '\0');
+#endif
+}
+
 /* Always null-terminates dest. Caller must pass a strictly positive size. */
 size_t String_safeStrncpy(char* restrict dest, const char* restrict src, size_t size);
 

@@ -8,7 +8,7 @@
 /* #undef BUILD_WITH_CPU_TEMP */
 
 /* Copyright message. */
-#define COPYRIGHT "(C) 2004-2019 Hisham Muhammad. (C) 2020-2022 htop dev team."
+#define COPYRIGHT "(C) 2004-2019 Hisham Muhammad. (C) 2020-2023 htop dev team."
 
 /* Predefine ncurses macro. */
 /* #undef ERR */
@@ -68,9 +68,6 @@
 /* Define to 1 if you have the `lzma' library (-llzma). */
 /* #undef HAVE_LIBLZMA */
 
-/* Define to 1 if you have the `m' library (-lm). */
-#define HAVE_LIBM 1
-
 /* The library is present. */
 #define HAVE_LIBNCURSES 1
 
@@ -128,6 +125,9 @@
 /* Define to 1 if you have the <pcp/pmapi.h> header file. */
 /* #undef HAVE_PCP_PMAPI_H */
 
+/* Define to 1 if you have the `pmLookupDescs' function. */
+/* #undef HAVE_PMLOOKUPDESCS */
+
 /* Define to 1 if you have the `readlinkat' function. */
 #define HAVE_READLINKAT 1
 
@@ -153,7 +153,7 @@
 #define HAVE_STRING_H 1
 
 /* Define to 1 if you have the <sys/capability.h> header file. */
-/* #undef HAVE_SYS_CAPABILITY_H */
+#define HAVE_SYS_CAPABILITY_H 1
 
 /* Define to 1 if you have the <sys/dir.h> header file, and it defines `DIR'.
    */
@@ -235,7 +235,7 @@
 #define PACKAGE_NAME "htop"
 
 /* Define to the full name and version of this package. */
-#define PACKAGE_STRING "htop 3.2.0"
+#define PACKAGE_STRING "htop 3.2.2"
 
 /* Define to the one symbol short name of this package. */
 #define PACKAGE_TARNAME "htop"
@@ -244,7 +244,7 @@
 #define PACKAGE_URL "https://htop.dev/"
 
 /* Define to the version of this package. */
-#define PACKAGE_VERSION "3.2.0"
+#define PACKAGE_VERSION "3.2.2"
 
 /* Path of proc filesystem. */
 #define PROCDIR "/proc"
@@ -343,7 +343,7 @@
 
 
 /* Version number of package */
-#define VERSION "3.2.0"
+#define VERSION "3.2.2"
 
 /* Define for Solaris 2.5.1 so the uint32_t typedef from <sys/synch.h>,
    <pthread.h>, or <semaphore.h> is not used. If the typedef were allowed, the

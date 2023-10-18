@@ -10,6 +10,7 @@ in the source distribution for its full text.
 #include "linux/LinuxProcessList.h"
 
 #include <assert.h>
+#include <ctype.h>
 #include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -166,6 +167,28 @@ static void LinuxProcessList_initNetlinkSocket(LinuxProcessList* this) {
 
 #endif
 
+static unsigned int scanAvailableCPUsFromCPUinfo(LinuxProcessList* this) {
+   FILE* file = fopen(PROCCPUINFOFILE, "r");
+   if (file == NULL)
+      return this->super.existingCPUs;
+
+   unsigned int availableCPUs = 0;
+
+   while (!feof(file)) {
+      char buffer[PROC_LINE_LENGTH];
+
+      if (fgets(buffer, PROC_LINE_LENGTH, file) == NULL)
+         break;
+
+      if (String_startsWith(buffer, "processor"))
+         availableCPUs++;
+   }
+
+   fclose(file);
+
+   return availableCPUs ? availableCPUs : 1;
+}
+
 static void LinuxProcessList_updateCPUcount(ProcessList* super) {
    /* Similar to get_nprocs_conf(3) / _SC_NPROCESSORS_CONF
     * https://sourceware.org/git/?p=glibc.git;a=blob;f=sysdeps/unix/sysv/linux/getsysstats.c;hb=HEAD
@@ -197,7 +220,7 @@ static void LinuxProcessList_updateCPUcount(ProcessList* super) {
       if (!String_startsWith(entry->d_name, "cpu"))
          continue;
 
-      char *endp;
+      char* endp;
       unsigned long int id = strtoul(entry->d_name + 3, &endp, 10);
       if (id == ULONG_MAX || endp == entry->d_name + 3 || *endp != '\0')
          continue;
@@ -240,6 +263,12 @@ static void LinuxProcessList_updateCPUcount(ProcessList* super) {
    if (existing < 1)
       return;
 
+   if (Running_containerized) {
+      /* LXC munges /proc/cpuinfo but not the /sys/devices/system/cpu/ files,
+       * so limit the visible CPUs to what the guest has been configured to see: */
+      currExisting = active = scanAvailableCPUsFromCPUinfo(this);
+   }
+
 #ifdef HAVE_SENSORS_SENSORS_H
    /* When started with offline CPUs, libsensors does not monitor those,
     * even when they become online. */
@@ -248,7 +277,7 @@ static void LinuxProcessList_updateCPUcount(ProcessList* super) {
 #endif
 
    super->activeCPUs = active;
-   assert(existing == currExisting);
+   assert(Running_containerized || (existing == currExisting));
    super->existingCPUs = currExisting;
 }
 
@@ -643,7 +672,7 @@ static void LinuxProcessList_readMaps(LinuxProcess* process, openat_arg_t procFd
       if (' ' != *readptr++)
          continue;
 
-      while(*readptr > ' ')
+      while (*readptr > ' ')
          readptr++; // Skip parsing this hex value
       if (' ' != *readptr++)
          continue;
@@ -735,6 +764,43 @@ static bool LinuxProcessList_readStatmFile(LinuxProcess* process, openat_arg_t p
    return r == 7;
 }
 
+static bool LinuxProcessList_checkPidNamespace(Process* process, openat_arg_t procFd) {
+   FILE* statusfile = fopenat(procFd, "status", "r");
+   if (!statusfile)
+      return false;
+
+   while (true) {
+      char buffer[PROC_LINE_LENGTH + 1];
+      if (fgets(buffer, sizeof(buffer), statusfile) == NULL)
+         break;
+
+      if (!String_startsWith(buffer, "NSpid:"))
+         continue;
+
+      char* ptr = buffer;
+      int pid_ns_count = 0;
+      while (*ptr && *ptr != '\n' && !isdigit(*ptr))
+         ++ptr;
+
+      while (*ptr && *ptr != '\n') {
+         if (isdigit(*ptr))
+            pid_ns_count++;
+         while (isdigit(*ptr))
+            ++ptr;
+         while (*ptr && *ptr != '\n' && !isdigit(*ptr))
+            ++ptr;
+      }
+
+      if (pid_ns_count > 1)
+         process->isRunningInContainer = true;
+
+      break;
+   }
+
+   fclose(statusfile);
+   return true;
+}
+
 static bool LinuxProcessList_readSmapsFile(LinuxProcess* process, openat_arg_t procFd, bool haveSmapsRollup) {
    //http://elixir.free-electrons.com/linux/v4.10/source/fs/proc/task_mmu.c#L719
    //kernel will return data in chunks of size PAGE_SIZE or less.
@@ -823,7 +889,7 @@ static void LinuxProcessList_readOpenVZData(LinuxProcess* process, openat_arg_t 
 
       char* value_end = name_value_sep;
 
-      while(*value_end > 32) {
+      while (*value_end > 32) {
          value_end++;
       }
 
@@ -833,7 +899,7 @@ static void LinuxProcessList_readOpenVZData(LinuxProcess* process, openat_arg_t 
 
       *value_end = '\0';
 
-      switch(field) {
+      switch (field) {
       case 1:
          foundEnvID = true;
          if (!String_eq(name_value_sep, process->ctid ? process->ctid : ""))
@@ -862,6 +928,13 @@ static void LinuxProcessList_readOpenVZData(LinuxProcess* process, openat_arg_t 
 }
 
 #endif
+
+static bool isContainerOrVMSlice(char* cgroup) {
+   if (String_startsWith(cgroup, "/user") || String_startsWith(cgroup, "/system"))
+      return false;
+
+   return true;
+}
 
 static void LinuxProcessList_readCGroupFile(LinuxProcess* process, openat_arg_t procFd) {
    FILE* file = fopenat(procFd, "cgroup", "r");
@@ -913,7 +986,7 @@ static void LinuxProcessList_readCGroupFile(LinuxProcess* process, openat_arg_t 
    free_and_xStrdup(&process->cgroup, output);
 
    if (!changed) {
-      if(process->cgroup_short) {
+      if (process->cgroup_short) {
          Process_updateFieldWidth(CCGROUP, strlen(process->cgroup_short));
       } else {
          //CCGROUP is alias to normal CGROUP if shortening fails
@@ -1062,9 +1135,7 @@ static void LinuxProcessList_readCwd(LinuxProcess* process, openat_arg_t procFd)
 #if defined(HAVE_READLINKAT) && defined(HAVE_OPENAT)
    ssize_t r = readlinkat(procFd, "cwd", pathBuffer, sizeof(pathBuffer) - 1);
 #else
-   char filename[MAX_NAME + 1];
-   xSnprintf(filename, sizeof(filename), "%s/cwd", procFd);
-   ssize_t r = readlink(filename, pathBuffer, sizeof(pathBuffer) - 1);
+   ssize_t r = Compat_readlink(procFd, "cwd", pathBuffer, sizeof(pathBuffer) - 1);
 #endif
 
    if (r < 0) {
@@ -1301,9 +1372,7 @@ static bool LinuxProcessList_readCmdlineFile(Process* process, openat_arg_t proc
 #if defined(HAVE_READLINKAT) && defined(HAVE_OPENAT)
    amtRead = readlinkat(procFd, "exe", filename, sizeof(filename) - 1);
 #else
-   char path[4096];
-   xSnprintf(path, sizeof(path), "%s/exe", procFd);
-   amtRead = readlink(path, filename, sizeof(filename) - 1);
+   amtRead = Compat_readlink(procFd, "exe", filename, sizeof(filename) - 1);
 #endif
    if (amtRead > 0) {
       filename[amtRead] = 0;
@@ -1323,7 +1392,8 @@ static bool LinuxProcessList_readCmdlineFile(Process* process, openat_arg_t proc
             if (process->procExeDeleted)
                filename[filenameLen - markerLen] = '\0';
 
-            process->mergedCommand.exeChanged |= oldExeDeleted ^ process->procExeDeleted;
+            if (oldExeDeleted != process->procExeDeleted)
+               process->mergedCommand.lastUpdate = 0;
          }
 
          Process_updateExe(process, filename);
@@ -1389,6 +1459,21 @@ static char* LinuxProcessList_updateTtyDevice(TtyDriver* ttyDrivers, unsigned lo
    return out;
 }
 
+static bool isOlderThan(const ProcessList* pl, const Process* proc, unsigned int seconds) {
+   assert(pl->realtimeMs > 0);
+
+   /* Starttime might not yet be parsed */
+   if (proc->starttime_ctime <= 0)
+      return false;
+
+   uint64_t realtime = pl->realtimeMs / 1000;
+
+   if (realtime < (uint64_t)proc->starttime_ctime)
+      return false;
+
+   return realtime - proc->starttime_ctime > seconds;
+}
+
 static bool LinuxProcessList_recurseProcTree(LinuxProcessList* this, openat_arg_t parentFd, const char* dirname, const Process* parent, double period) {
    ProcessList* pl = (ProcessList*) this;
    const struct dirent* entry;
@@ -1413,6 +1498,7 @@ static bool LinuxProcessList_recurseProcTree(LinuxProcessList* this, openat_arg_
    const unsigned int activeCPUs = pl->activeCPUs;
    const bool hideKernelThreads = settings->hideKernelThreads;
    const bool hideUserlandThreads = settings->hideUserlandThreads;
+   const bool hideRunningInContainer = settings->hideRunningInContainer;
    while ((entry = readdir(dir)) != NULL) {
       const char* name = entry->d_name;
 
@@ -1446,6 +1532,15 @@ static bool LinuxProcessList_recurseProcTree(LinuxProcessList* this, openat_arg_
       if (parent && pid == parent->pid)
          continue;
 
+#ifdef HAVE_OPENAT
+      int procFd = openat(dirFd, entry->d_name, O_RDONLY | O_DIRECTORY | O_NOFOLLOW);
+      if (procFd < 0)
+         continue;
+#else
+      char procFd[4096];
+      xSnprintf(procFd, sizeof(procFd), "%s/%s", dirFd, entry->d_name);
+#endif
+
       bool preExisting;
       Process* proc = ProcessList_getProcess(pl, pid, &preExisting, LinuxProcess_new);
       LinuxProcess* lp = (LinuxProcess*) proc;
@@ -1453,16 +1548,16 @@ static bool LinuxProcessList_recurseProcTree(LinuxProcessList* this, openat_arg_
       proc->tgid = parent ? parent->pid : pid;
       proc->isUserlandThread = proc->pid != proc->tgid;
 
-#ifdef HAVE_OPENAT
-      int procFd = openat(dirFd, entry->d_name, O_RDONLY | O_DIRECTORY | O_NOFOLLOW);
-      if (procFd < 0)
-         goto errorReadingProcess;
-#else
-      char procFd[4096];
-      xSnprintf(procFd, sizeof(procFd), "%s/%s", dirFd, entry->d_name);
-#endif
-
       LinuxProcessList_recurseProcTree(this, procFd, "task", proc, period);
+
+      if (ss->flags & PROCESS_FLAG_LINUX_CGROUP || hideRunningInContainer) {
+         LinuxProcessList_readCGroupFile(lp, procFd);
+         if (hideRunningInContainer && lp->cgroup && isContainerOrVMSlice(lp->cgroup)) {
+            if (!LinuxProcessList_checkPidNamespace(proc, procFd)) {
+               goto errorReadingProcess;
+            }
+         }
+      }
 
       /*
        * These conditions will not trigger on first occurrence, cause we need to
@@ -1486,6 +1581,12 @@ static bool LinuxProcessList_recurseProcTree(LinuxProcessList* this, openat_arg_
          Compat_openatArgClose(procFd);
          continue;
       }
+      if (preExisting && hideRunningInContainer && proc->isRunningInContainer) {
+         proc->updated = true;
+         proc->show = false;
+         Compat_openatArgClose(procFd);
+         continue;
+      }
 
       if (ss->flags & PROCESS_FLAG_IO)
          LinuxProcessList_readIoFile(lp, procFd, pl->realtimeMs);
@@ -1497,7 +1598,7 @@ static bool LinuxProcessList_recurseProcTree(LinuxProcessList* this, openat_arg_
          bool prev = proc->usesDeletedLib;
 
          if (!proc->isKernelThread && !proc->isUserlandThread &&
-            ((ss->flags & PROCESS_FLAG_LINUX_LRS_FIX) || (settings->highlightDeletedExe && !proc->procExeDeleted))) {
+            ((ss->flags & PROCESS_FLAG_LINUX_LRS_FIX) || (settings->highlightDeletedExe && !proc->procExeDeleted && isOlderThan(pl, proc, 10)))) {
 
             // Check if we really should recalculate the M_LRS value for this process
             uint64_t passedTimeInMs = pl->realtimeMs - lp->last_mlrs_calctime;
@@ -1514,7 +1615,8 @@ static bool LinuxProcessList_recurseProcTree(LinuxProcessList* this, openat_arg_
             lp->m_lrs = (proc->isUserlandThread && parent) ? ((const LinuxProcess*)parent)->m_lrs : 0;
          }
 
-         proc->mergedCommand.exeChanged |= prev ^ proc->usesDeletedLib;
+         if (prev != proc->usesDeletedLib)
+            proc->mergedCommand.lastUpdate = 0;
       }
 
       if ((ss->flags & PROCESS_FLAG_LINUX_SMAPS) && !Process_isKernelThread(proc)) {
@@ -1535,7 +1637,7 @@ static bool LinuxProcessList_recurseProcTree(LinuxProcessList* this, openat_arg_
       char statCommand[MAX_NAME + 1];
       unsigned long long int lasttimes = (lp->utime + lp->stime);
       unsigned long int tty_nr = proc->tty_nr;
-      if (! LinuxProcessList_readStatFile(proc, procFd, statCommand, sizeof(statCommand)))
+      if (!LinuxProcessList_readStatFile(proc, procFd, statCommand, sizeof(statCommand)))
          goto errorReadingProcess;
 
       if (lp->flags & PF_KTHREAD) {
@@ -1599,10 +1701,6 @@ static bool LinuxProcessList_recurseProcTree(LinuxProcessList* this, openat_arg_
       }
       #endif
 
-      if (ss->flags & PROCESS_FLAG_LINUX_CGROUP) {
-         LinuxProcessList_readCGroupFile(lp, procFd);
-      }
-
       if (ss->flags & PROCESS_FLAG_LINUX_OOM) {
          LinuxProcessList_readOomData(lp, procFd);
       }
@@ -1653,8 +1751,13 @@ errorReadingProcess:
 #endif
 
          if (preExisting) {
-            ProcessList_remove(pl, proc);
+            /*
+             * The only real reason for coming here (apart from Linux violating the /proc API)
+             * would be the process going away with its /proc files disappearing (!HAVE_OPENAT).
+             * However, we want to keep in the process list for now for the "highlight dying" mode.
+             */
          } else {
+            /* A really short-lived process that we don't have full info about */
             Process_delete((Object*)proc);
          }
       }
@@ -1874,6 +1977,7 @@ static inline void LinuxProcessList_scanZfsArcstats(LinuxProcessList* lpl) {
 
       switch (buffer[0]) {
       case 'c':
+         tryRead("c_min", &lpl->zfs.min);
          tryRead("c_max", &lpl->zfs.max);
          tryReadFlag("compressed_size", &lpl->zfs.compressed, lpl->zfs.isCompressed);
          break;
@@ -1908,6 +2012,7 @@ static inline void LinuxProcessList_scanZfsArcstats(LinuxProcessList* lpl) {
 
    lpl->zfs.enabled = (lpl->zfs.size > 0 ? 1 : 0);
    lpl->zfs.size    /= 1024;
+   lpl->zfs.min    /= 1024;
    lpl->zfs.max    /= 1024;
    lpl->zfs.MFU    /= 1024;
    lpl->zfs.MRU    /= 1024;
@@ -2101,16 +2206,11 @@ static void scanCPUFrequencyFromCPUinfo(LinuxProcessList* this) {
       if (fgets(buffer, PROC_LINE_LENGTH, file) == NULL)
          break;
 
-      if (
-         (sscanf(buffer, "processor : %d", &cpuid) == 1) ||
-         (sscanf(buffer, "processor: %d", &cpuid) == 1)
-      ) {
+      if (sscanf(buffer, "processor : %d", &cpuid) == 1) {
          continue;
       } else if (
          (sscanf(buffer, "cpu MHz : %lf", &frequency) == 1) ||
-         (sscanf(buffer, "cpu MHz: %lf", &frequency) == 1) ||
-         (sscanf(buffer, "clock : %lfMHz", &frequency) == 1) ||
-         (sscanf(buffer, "clock: %lfMHz", &frequency) == 1)
+         (sscanf(buffer, "clock : %lfMHz", &frequency) == 1)
       ) {
          if (cpuid < 0 || (unsigned int)cpuid > (existingCPUs - 1)) {
             continue;

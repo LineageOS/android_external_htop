@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "0bdd0126_7552fc8f",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 28223
+      },
+      "writtenOn": "2025-06-21T18:37:45Z",
+      "side": 1,
+      "message": "https://review.lineageos.org/c/LineageOS/android_external_htop/+/434133",
+      "revId": "d1f2f8d251c6a59e6b03778b9217f221d79f1bd1",
+      "serverId": "1ec6b3db-b2c1-4fa4-84a2-4c7efe89ba71"
+    }
+  ]
+}

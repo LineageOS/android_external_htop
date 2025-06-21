@@ -9,6 +9,12 @@ in the source distribution for its full text.
 
 #include "XUtils.h"
 
+const char* strchrnul(const char* s, int ch) {
+  while (*s && *s != ch) {
+    ++s;
+  }
+  return s;
+}
 
 typedef struct StrBuf_state {
    char* buf;

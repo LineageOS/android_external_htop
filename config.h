@@ -7,8 +7,11 @@
 /* Define if CPU temperature option should be enabled. */
 /* #undef BUILD_WITH_CPU_TEMP */
 
+/* Configuration path. */
+#define CONFIGDIR "/.config"
+
 /* Copyright message. */
-#define COPYRIGHT "(C) 2004-2019 Hisham Muhammad. (C) 2020-2023 htop dev team."
+#define COPYRIGHT "(C) 2004-2019 Hisham Muhammad. (C) 2020-2025 htop dev team."
 
 /* Predefine ncurses macro. */
 /* #undef ERR */
@@ -19,39 +22,54 @@
 /* Define if ancient vserver support enabled. */
 /* #undef HAVE_ANCIENT_VSERVER */
 
+/* The access attribute is supported. */
+/* #undef HAVE_ATTR_ACCESS */
+
 /* The alloc_size attribute is supported. */
 #define HAVE_ATTR_ALLOC_SIZE 1
 
-/* Define to 1 if you have the `clock_gettime' function. */
+/* The nonnull attribute is supported. */
+#define HAVE_ATTR_NONNULL 1
+
+/* The returns_nonnull attribute is supported. */
+#define HAVE_ATTR_RETNONNULL 1
+
+/* Define to 1 if the compiler supports '__builtin_ctz' function. */
+#define HAVE_BUILTIN_CTZ 1
+
+/* Define to 1 if you have the 'clock_gettime' function. */
 #define HAVE_CLOCK_GETTIME 1
 
 /* Define to 1 if you have the <curses.h> header file. */
 #define HAVE_CURSES_H 1
 
 /* Define if delay accounting support should be enabled. */
-/* #undef HAVE_DELAYACCT */
+#define HAVE_DELAYACCT 1
 
-/* Define to 1 if you have the <dirent.h> header file, and it defines `DIR'.
+/* Define to 1 if you have the <dirent.h> header file, and it defines 'DIR'.
    */
 #define HAVE_DIRENT_H 1
 
-/* Define to 1 if you have the `dladdr' function. */
+/* Define to 1 if you have the 'dladdr' function. */
 #define HAVE_DLADDR 1
 
 /* Define to 1 if you have the <execinfo.h> header file. */
-/* #undef HAVE_EXECINFO_H */
+#define HAVE_EXECINFO_H 1
 
-/* Define to 1 if you have the `faccessat' function. */
+/* Define to 1 if you have the 'faccessat' function. */
 #define HAVE_FACCESSAT 1
 
-/* Define to 1 if you have the `fstatat' function. */
+/* Define to 1 if you have the 'fstatat' function. */
 #define HAVE_FSTATAT 1
 
-/* Define to 1 if you have the `getmouse' function. */
+/* Define to 1 if you have the 'getmouse' function. */
 #define HAVE_GETMOUSE 1
 
-/* Define to 1 if you have the `host_get_clock_service' function. */
+/* Define to 1 if you have the 'host_get_clock_service' function. */
 /* #undef HAVE_HOST_GET_CLOCK_SERVICE */
+
+/* Define to 1 if you have the 'host_statistics64' function. */
+/* #undef HAVE_HOST_STATISTICS64 */
 
 /* Define to 1 if you have the <hwloc.h> header file. */
 /* #undef HAVE_HWLOC_H */
@@ -59,29 +77,29 @@
 /* Define to 1 if you have the <inttypes.h> header file. */
 #define HAVE_INTTYPES_H 1
 
-/* Define to 1 if you have the `cap' library (-lcap). */
-/* #undef HAVE_LIBCAP */
+/* Define to 1 if you have the 'cap' library (-lcap). */
+#define HAVE_LIBCAP 1
 
-/* Define to 1 if you have the `hwloc' library (-lhwloc). */
+/* Define to 1 if you have the 'hwloc' library (-lhwloc). */
 /* #undef HAVE_LIBHWLOC */
 
-/* Define to 1 if you have the `lzma' library (-llzma). */
+/* Define to 1 if you have the 'lzma' library (-llzma). */
 /* #undef HAVE_LIBLZMA */
 
-/* The library is present. */
+/* libcurses is present */
 #define HAVE_LIBNCURSES 1
 
-/* The library is present. */
-/* #undef HAVE_LIBNCURSESW */
+/* libncursesw is present */
+#define HAVE_LIBNCURSESW 1
 
-/* Define to 1 if you have the `sensors' library (-lsensors). */
+/* Define to 1 if you have the 'sensors' library (-lsensors). */
 /* #undef HAVE_LIBSENSORS */
 
-/* Define to 1 if you have the `systemd' library (-lsystemd). */
+/* Define to 1 if you have the 'systemd' library (-lsystemd). */
 /* #undef HAVE_LIBSYSTEMD */
 
-/* Define to 1 if you have the `unwind' library (-lunwind). */
-/* #undef HAVE_LIBUNWIND */
+/* Define to 1 if you have the 'unwind' library (-lunwind). */
+#define HAVE_LIBUNWIND 1
 
 /* Define to 1 if you have the <libunwind.h> header file. */
 /* #undef HAVE_LIBUNWIND_H */
@@ -92,10 +110,10 @@
 /* Define to 1 if you have the <mach/mach_time.h> header file. */
 /* #undef HAVE_MACH_MACH_TIME_H */
 
-/* Define to 1 if you have the `mach_timebase_info' function. */
-/* #undef HAVE_MACH_TIMEBASE_INFO */
+/* Define to 1 if <wchar.h> declares mbstate_t. */
+#define HAVE_MBSTATE_T 1
 
-/* Define to 1 if you have the `memfd_create' function. */
+/* Define to 1 if you have the 'memfd_create' function. */
 #define HAVE_MEMFD_CREATE 1
 
 /* Define to 1 if you have the <minix/config.h> header file. */
@@ -104,19 +122,31 @@
 /* Define to 1 if you have the <ncursesw/curses.h> header file. */
 /* #undef HAVE_NCURSESW_CURSES_H */
 
+/* Define to 1 if you have the <ncursesw/term.h> header file. */
+/* #undef HAVE_NCURSESW_TERM_H */
+
 /* Define to 1 if you have the <ncurses/curses.h> header file. */
 /* #undef HAVE_NCURSES_CURSES_H */
-
-/* Define to 1 if you have the <ncurses.h> header file. */
-/* #undef HAVE_NCURSES_H */
 
 /* Define to 1 if you have the <ncurses/ncurses.h> header file. */
 /* #undef HAVE_NCURSES_NCURSES_H */
 
-/* Define to 1 if you have the <ndir.h> header file, and it defines `DIR'. */
+/* Define to 1 if you have the <ncurses/term.h> header file. */
+/* #undef HAVE_NCURSES_TERM_H */
+
+/* Define to 1 if you have the <ndir.h> header file, and it defines 'DIR'. */
 /* #undef HAVE_NDIR_H */
 
-/* Define to 1 if you have the `openat' function. */
+/* Define to 1 if you have the <netlink/attr.h> header file. */
+#define HAVE_NETLINK_ATTR_H 1
+
+/* Define to 1 if you have the <netlink/handlers.h> header file. */
+#define HAVE_NETLINK_HANDLERS_H 1
+
+/* Define to 1 if you have the <netlink/msg.h> header file. */
+#define HAVE_NETLINK_MSG_H 1
+
+/* Define to 1 if you have the 'openat' function. */
 #define HAVE_OPENAT 1
 
 /* Define if openvz support enabled. */
@@ -125,16 +155,22 @@
 /* Define to 1 if you have the <pcp/pmapi.h> header file. */
 /* #undef HAVE_PCP_PMAPI_H */
 
-/* Define to 1 if you have the `pmLookupDescs' function. */
+/* Define to 1 if you have the 'pmLookupDescs' function. */
 /* #undef HAVE_PMLOOKUPDESCS */
 
-/* Define to 1 if you have the `readlinkat' function. */
+/* Define to 1 if you have the 'readlinkat' function. */
 #define HAVE_READLINKAT 1
+
+/* Define to 1 if you have the 'sched_getscheduler' function. */
+#define HAVE_SCHED_GETSCHEDULER 1
+
+/* Define to 1 if you have the 'sched_setscheduler' function. */
+#define HAVE_SCHED_SETSCHEDULER 1
 
 /* Define to 1 if you have the <sensors/sensors.h> header file. */
 /* #undef HAVE_SENSORS_SENSORS_H */
 
-/* Define to 1 if you have the `set_escdelay' function. */
+/* Define to 1 if you have the 'set_escdelay' function. */
 #define HAVE_SET_ESCDELAY 1
 
 /* Define to 1 if you have the <stdint.h> header file. */
@@ -146,20 +182,26 @@
 /* Define to 1 if you have the <stdlib.h> header file. */
 #define HAVE_STDLIB_H 1
 
+/* Define to 1 if you have the 'strchrnul' function. */
+/* #undef HAVE_STRCHRNUL */
+
 /* Define to 1 if you have the <strings.h> header file. */
 #define HAVE_STRINGS_H 1
 
 /* Define to 1 if you have the <string.h> header file. */
 #define HAVE_STRING_H 1
 
+/* Define to 1 if the system has the type 'struct vm_statistics64'. */
+/* #undef HAVE_STRUCT_VM_STATISTICS64 */
+
 /* Define to 1 if you have the <sys/capability.h> header file. */
 #define HAVE_SYS_CAPABILITY_H 1
 
-/* Define to 1 if you have the <sys/dir.h> header file, and it defines `DIR'.
+/* Define to 1 if you have the <sys/dir.h> header file, and it defines 'DIR'.
    */
 /* #undef HAVE_SYS_DIR_H */
 
-/* Define to 1 if you have the <sys/ndir.h> header file, and it defines `DIR'.
+/* Define to 1 if you have the <sys/ndir.h> header file, and it defines 'DIR'.
    */
 /* #undef HAVE_SYS_NDIR_H */
 
@@ -177,6 +219,9 @@
 
 /* Define to 1 if you have the <sys/utsname.h> header file. */
 #define HAVE_SYS_UTSNAME_H 1
+
+/* Define to 1 if you have the <term.h> header file. */
+#define HAVE_TERM_H 1
 
 /* Define to 1 if you have the <unistd.h> header file. */
 #define HAVE_UNISTD_H 1
@@ -214,13 +259,16 @@
 /* Building for an unsupported platform. */
 /* #undef HTOP_UNSUPPORTED */
 
-/* Define to 1 if `major', `minor', and `makedev' are declared in <mkdev.h>.
+/* Define to 1 if 'major', 'minor', and 'makedev' are declared in <mkdev.h>.
    */
 /* #undef MAJOR_IN_MKDEV */
 
-/* Define to 1 if `major', `minor', and `makedev' are declared in
+/* Define to 1 if 'major', 'minor', and 'makedev' are declared in
    <sysmacros.h>. */
 #define MAJOR_IN_SYSMACROS 1
+
+/* Define to enable stdbool.h in ncurses */
+#define NCURSES_ENABLE_STDBOOL_H 1
 
 /* File with OS release details. */
 #define OSRELEASEFILE "/etc/os-release"
@@ -235,7 +283,7 @@
 #define PACKAGE_NAME "htop"
 
 /* Define to the full name and version of this package. */
-#define PACKAGE_STRING "htop 3.2.2"
+#define PACKAGE_STRING "htop 3.4.1"
 
 /* Define to the one symbol short name of this package. */
 #define PACKAGE_TARNAME "htop"
@@ -244,17 +292,17 @@
 #define PACKAGE_URL "https://htop.dev/"
 
 /* Define to the version of this package. */
-#define PACKAGE_VERSION "3.2.2"
+#define PACKAGE_VERSION "3.4.1"
 
 /* Path of proc filesystem. */
 #define PROCDIR "/proc"
 
-/* Define to 1 if all of the C90 standard headers exist (not just the ones
+/* Define to 1 if all of the C89 standard headers exist (not just the ones
    required in a freestanding environment). This macro is provided for
    backward compatibility; new code need not use it. */
 #define STDC_HEADERS 1
 
-/* Enable extensions on AIX 3, Interix.  */
+/* Enable extensions on AIX, Interix, z/OS.  */
 #ifndef _ALL_SOURCE
 # define _ALL_SOURCE 1
 #endif
@@ -315,11 +363,15 @@
 #ifndef __STDC_WANT_IEC_60559_DFP_EXT__
 # define __STDC_WANT_IEC_60559_DFP_EXT__ 1
 #endif
+/* Enable extensions specified by C23 Annex F.  */
+#ifndef __STDC_WANT_IEC_60559_EXT__
+# define __STDC_WANT_IEC_60559_EXT__ 1
+#endif
 /* Enable extensions specified by ISO/IEC TS 18661-4:2015.  */
 #ifndef __STDC_WANT_IEC_60559_FUNCS_EXT__
 # define __STDC_WANT_IEC_60559_FUNCS_EXT__ 1
 #endif
-/* Enable extensions specified by ISO/IEC TS 18661-3:2015.  */
+/* Enable extensions specified by C23 Annex H and ISO/IEC TS 18661-3:2015.  */
 #ifndef __STDC_WANT_IEC_60559_TYPES_EXT__
 # define __STDC_WANT_IEC_60559_TYPES_EXT__ 1
 #endif
@@ -343,7 +395,16 @@
 
 
 /* Version number of package */
-#define VERSION "3.2.2"
+#define VERSION "3.4.1"
+
+/* Number of bits in a file offset, on hosts where this is settable. */
+/* #undef _FILE_OFFSET_BITS */
+
+/* Define to 1 on platforms where this makes off_t a 64-bit type. */
+/* #undef _LARGE_FILES */
+
+/* Number of bits in time_t, on hosts where this is settable. */
+/* #undef _TIME_BITS */
 
 /* Define for Solaris 2.5.1 so the uint32_t typedef from <sys/synch.h>,
    <pthread.h>, or <semaphore.h> is not used. If the typedef were allowed, the
@@ -360,13 +421,37 @@
    #define below would cause a syntax error. */
 /* #undef _UINT8_T */
 
-/* Define to `int' if <sys/types.h> doesn't define. */
+/* Enables XPG4v2 (SUSv1) interfaces if they are not enabled already with _XOPEN_SOURCE */
+#ifndef _XOPEN_SOURCE_EXTENDED
+#define _XOPEN_SOURCE_EXTENDED 1
+#endif
+
+
+/* Define to 1 on platforms where this makes time_t a 64-bit type. */
+/* #undef __MINGW_USE_VC2005_COMPAT */
+
+/* Define as 'int' if <sys/types.h> doesn't define. */
 /* #undef gid_t */
+
+/* Define to a type if <wchar.h> does not define. */
+/* #undef mbstate_t */
+
+/* Define to 'int' if <sys/types.h> does not define. */
+/* #undef mode_t */
+
+/* Define to 'long int' if <sys/types.h> does not define. */
+/* #undef off_t */
 
 /* Define as a signed integer type capable of holding a process identifier. */
 /* #undef pid_t */
 
-/* Define to `int' if <sys/types.h> doesn't define. */
+/* Define as 'unsigned int' if <stddef.h> doesn't define. */
+/* #undef size_t */
+
+/* Define as 'int' if <sys/types.h> doesn't define. */
+/* #undef ssize_t */
+
+/* Define as 'int' if <sys/types.h> doesn't define. */
 /* #undef uid_t */
 
 /* Define to the type of an unsigned integer type of width exactly 16 bits if

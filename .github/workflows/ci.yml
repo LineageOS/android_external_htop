@@ -267,7 +267,7 @@ jobs:
           with:
             submodules: recursive
         - name: Compile
-          uses: vmactions/netbsd-vm@v1
+          uses: vmactions/netbsd-vm@v1.4.4
           with:
             release: '10.1'
             usesh: true
